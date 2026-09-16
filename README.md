@@ -1,23 +1,52 @@
 # SampleSheet作成ツール（GenerateFASTQ）
 
 **MiSeq i100** と **MiSeq** の GenerateFASTQ 用 SampleSheet CSV を作成する Web ツールです。
-機種ごとにタブを切り替えて使用します。
+機種ごとにタブを切り替えて使用します。index はどちらも UDI index の **set 指定**で割り当てます。
 
 - ビルド不要の静的サイト（HTML + CSS + バニラ JavaScript、外部依存ゼロ）
 - 処理はすべてブラウザ内で完結し、サンプル情報はサーバーに送信されません
-- UI は DNA希釈計算ツール（MiSeq用）v2.2 Web版と同じ配色・構成
 
 ## 機種ごとの違い
 
 | | MiSeq i100 | MiSeq |
 |---|---|---|
-| Index | UDI index（set 指定） | Nextera index（N7xx / S5xx） |
-| [Data] 列数 | 8列 | 6列 |
+| Index | UDI index（set 指定） | UDI index（set 指定） |
+| [Data] 列数 | 8列（set名ありで10列） | 6列（set名ありで8列） |
 | [Data] 列構成 | Sample_ID, Sample_Name, Description, I7_Index_ID, index, I5_Index_ID, index2, Sample_Project | Sample_ID, Description, I7_Index_ID, index, I5_Index_ID, index2 |
 | Index Kit 行 | あり | なし |
 | Module 既定値 | `GenerateFASTQ - 3.1.0` | `GenerateFASTQ - 2.0.0` |
 
 Workflow・Chemistry・adapter・AdvancedSetting1・[Reads] の既定値は両機種で共通です。
+
+## Index の指定方法（set 記法）
+
+**1つの set ラベル（例 `set1-1-3`）= 8連チューブ1本分 = 8 index** です。
+開始 set と終了 set を **別々の入力欄** に指定します。
+
+| 開始 set | 終了 set | 展開される index |
+|---|---|---|
+| `set1-1-1` | `set1-1-12` | 96 件 |
+| `set1-1-1` | `12` | 96 件（終了は番号だけでも可） |
+| `set1-1-1` | （空欄） | 8 件（開始グループのみ） |
+
+**指定例**: Index1 に `set1-1-1`〜`set1-1-12`、Index2 に `set1-2-1`〜`set1-2-12` を指定すると、
+i7 は S762:TTACCGAC 〜 S733:CCACAACA、i5 は S512:CGAATACG 〜 S561:GTACCACA が
+先頭のサンプルから順に割り当てられます。
+
+`setN-M-K` の各要素は **N**: セット番号（1〜4）、**M**: `1`=i7 / `2`=i5、**K**: グループ番号（1〜12）です。
+1セット = 12グループ × 8 index = 96 index、全4セットで 768 index を収録しています。
+
+## set名列の出力
+
+結果表には **Index1_Set / Index2_Set** の列が常に表示され、各サンプルがどの set の
+どのウェルの index を使っているかを `set1-1-3-5`（set-側-グループ-ウェル位置）の形式で確認できます。
+
+CSV に含めるかどうかは **「CSVにset名列を出力する」チェックボックス**で切り替えます。
+
+- **OFF（既定）**: 装置が読む標準の列構成のまま出力（i100 = 8列 / MiSeq = 6列）
+- **ON**: `index` の直後に `Index1_Set`、`index2` の直後に `Index2_Set` を挿入（i100 = 10列 / MiSeq = 8列）
+
+結果表の set名列は、出力対象のときは緑、対象外のときはグレーで表示されます。
 
 ## 入力項目
 
@@ -47,45 +76,20 @@ Workflow・Chemistry・adapter・AdvancedSetting1・[Reads] の既定値は両�
 | Description | リストを貼り付け（1行1件）／全行への一括入力ボタンあり |
 | Sample_Project（i100 のみ） | 既定は空白 |
 
-## Index の指定方法
-
-### MiSeq i100 — set 指定
-
-`UDI index for runsheet.xlsx` の構造をそのまま扱います。
-**1つの set ラベル（例 `set1-1-3`）= 8連チューブ1本分 = 8 index** です。
-
-開始 set と終了 set を **別々の入力欄** に指定します。
-
-| 開始 set | 終了 set | 展開される index |
-|---|---|---|
-| `set1-1-1` | `set1-1-12` | 96 件 |
-| `set1-1-1` | `12` | 96 件（終了は番号だけでも可） |
-| `set1-1-1` | （空欄） | 8 件（開始グループのみ） |
-
-**指定例**: Index1 に `set1-1-1`〜`set1-1-12`、Index2 に `set1-2-1`〜`set1-2-12` を指定すると、
-i7 は S762:TTACCGAC 〜 S733:CCACAACA、i5 は S512:CGAATACG 〜 S561:GTACCACA が
-先頭のサンプルから順に割り当てられます。
-
-`setN-M-K` の各要素は **N**: セット番号（1〜4）、**M**: `1`=i7 / `2`=i5、**K**: グループ番号（1〜12）です。
-1セット = 12グループ × 8 index = 96 index、全4セットで 768 index を収録しています。
-
-### MiSeq — Nextera index
-
-I7（N7xx・24件）と I5（S5xx・6件）の使用範囲をプルダウンで選びます。
-**I7 を開始から終了まで順に巡回し、1巡するごとに I5 を次へ送る** 割当です
-（例: N701〜N729 × S508〜S516 なら、1〜24件目が S508、25〜48件目が S510…）。
-最大 24 × 6 = 144 サンプルまで対応します。
+各入力欄の左には **行番号** が表示され、スクロールに追従します。
 
 ## サンプル名の末尾に文字列を追加
 
 行範囲を指定して、末尾に任意の文字列をまとめて追加できます。
 
 - **対象**: Sample_Name / Sample_ID / Description（MiSeq タブは Sample_ID / Description）
-- **行**: 開始行 〜 終了行（1始まり）
+- **行**: 開始行 〜 終了行（入力欄の行番号を参照）
 - **追加する文字列**: 例 `_16S`
 
 例えば行 1〜8 に `_16S` を追加すると `Demo-Reef-01` → `Demo-Reef-01_16S` になります。
-直前の操作は「元に戻す」で取り消せます。
+
+**「付与前に戻す」** は、その列に対して **最初に追加を行う前の状態** へまとめて戻します。
+複数回追加していても一度の操作で元の状態に復元されます（1操作ずつの取り消しではありません）。
 
 ## 出力
 
@@ -97,7 +101,7 @@ I7（N7xx・24件）と I5（S5xx・6件）の使用範囲をプルダウンで�
 
 作成時に以下を自動チェックします。不足や行数不一致はエラー、その他は結果表の下に「確認事項」として表示されます。
 
-- Index の件数（i100）／組み合わせ数（MiSeq）がサンプル数に足りているか（不足はエラー）
+- Index の件数がサンプル数に足りているか（不足はエラー）
 - Sample_ID と Description の行数一致（不一致はエラー）
 - Index の余剰（警告）
 - Sample_ID の重複（警告）
@@ -113,11 +117,10 @@ I7（N7xx・24件）と I5（S5xx・6件）の使用範囲をプルダウンで�
 │   └── favicon.svg
 ├── src/
 │   ├── udi-data.js         # UDI index データ（xlsx から生成・自動生成物）
-│   ├── nextera-data.js     # Nextera index データ
 │   ├── sheet.js            # set展開・行構築・CSV生成のロジックコア
 │   └── app.js              # UI レイヤー
 ├── tests/
-│   └── sheet.test.mjs      # ロジック検証（19件）
+│   └── sheet.test.mjs      # ロジック検証（21件）
 ├── .github/workflows/test.yml
 ├── vercel.json
 ├── package.json
@@ -158,14 +161,13 @@ git push -u origin main
 3. Framework Preset は **Other**（`vercel.json` によりビルドは実行されません）
 4. Root Directory はリポジトリ直下のまま → **Deploy**
 
-## 検証済み項目（`npm test` / 全19件）
+## 検証済み項目（`npm test` / 全21件）
 
 - UDI データの構造（4セット × 2側 × 12グループ × 8件 = 768 index）
 - 開始/終了を別指定した set 範囲の展開結果が仕様の例と一致
-- MiSeq i100 の CSV 構造（8列・Index Kit 行あり）が既存シートと一致
-- Nextera index の件数（i7 24件 / i5 6件）と、i7巡回 × i5送りの割当順序
-- MiSeq の CSV 構造（6列・Index Kit 行なし）が既存シートと一致
-- 接尾辞付与の対象行・件数と異常系（範囲逆転・行数超過・空文字）
+- set名列の有無による列構成の切り替え（i100: 8列⇔10列、MiSeq: 6列⇔8列）
+- MiSeq i100 / MiSeq の CSV 構造が既存シートと一致（区切り行のカンマ数も含む）
+- 接尾辞付与の対象行・件数と異常系、複数回適用してもベースラインが不変であること
 - 日付の正規化と異常系、Sample_Name の自動反映と個別修正の優先
 
 ## ライセンス

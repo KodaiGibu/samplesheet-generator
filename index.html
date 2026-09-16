@@ -50,7 +50,7 @@
       </fieldset>
 
       <fieldset class="lf">
-        <legend>Index（UDI index / set 指定）</legend>
+        <legend>Index（set 指定）</legend>
         <div class="param-grid">
           <span class="idx-label">Index1 / i7</span>
           <label>開始 set:<input type="text" id="a-i7-start" size="12" placeholder="set1-1-1"></label>
@@ -71,9 +71,18 @@
       <fieldset class="lf">
         <legend>[Data]（リストを貼り付け）</legend>
         <div class="text-cols three">
-          <label>Sample_ID（1行1件）<textarea id="a-ids" rows="12" spellcheck="false"></textarea></label>
-          <label>Sample_Name（空欄なら Sample_ID を反映）<textarea id="a-names" rows="12" spellcheck="false"></textarea></label>
-          <label>Description（1行1件）<textarea id="a-descs" rows="12" spellcheck="false"></textarea></label>
+          <div class="ta-field">
+            <span class="ta-title">Sample_ID（1行1件）</span>
+            <div class="ta-wrap"><div class="ta-gutter" id="a-ids-gutter"></div><textarea id="a-ids" rows="12" spellcheck="false" wrap="off"></textarea></div>
+          </div>
+          <div class="ta-field">
+            <span class="ta-title">Sample_Name（空欄なら Sample_ID を反映）</span>
+            <div class="ta-wrap"><div class="ta-gutter" id="a-names-gutter"></div><textarea id="a-names" rows="12" spellcheck="false" wrap="off"></textarea></div>
+          </div>
+          <div class="ta-field">
+            <span class="ta-title">Description（1行1件）</span>
+            <div class="ta-wrap"><div class="ta-gutter" id="a-descs-gutter"></div><textarea id="a-descs" rows="12" spellcheck="false" wrap="off"></textarea></div>
+          </div>
         </div>
         <div class="param-grid">
           <label>Sample_Project:<input type="text" id="a-project" size="20"></label>
@@ -90,18 +99,21 @@
             <option value="ids">Sample_ID</option>
             <option value="descs">Description</option>
           </select></label>
-          <label>行:<input type="number" id="a-suffix-from" size="4" min="1" value="1"></label>
-          <label>〜<input type="number" id="a-suffix-to" size="4" min="1" value="8"></label>
+          <label>行:<input type="number" id="a-suffix-from" min="1" value="1"></label>
+          <label>〜<input type="number" id="a-suffix-to" min="1" value="8"></label>
           <label>追加する文字列:<input type="text" id="a-suffix-text" size="14" placeholder="_16S"></label>
           <button type="button" id="a-suffix-apply">追加</button>
-          <button type="button" id="a-suffix-undo" class="ghost">元に戻す</button>
+          <button type="button" id="a-suffix-undo" class="ghost">付与前に戻す</button>
         </div>
-        <p class="hint">例: 行 1〜8 に <code>_16S</code> を追加すると <code>eDNA-01</code> → <code>eDNA-01_16S</code> になります。</p>
+        <p class="hint">左側の行番号を参照して範囲を指定してください。「付与前に戻す」は、
+          この列に対して <b>最初に追加を行う前の状態</b> にまとめて戻します（複数回追加していても一度で戻ります）。</p>
       </fieldset>
 
       <div class="btnbar">
         <button type="button" id="a-build" class="primary">シート作成</button>
         <button type="button" id="a-clear">クリア</button>
+        <span class="vsep"></span>
+        <label class="chk"><input type="checkbox" id="a-with-set"> CSVにset名列を出力する</label>
         <span class="vsep"></span>
         <button type="button" id="a-csv">CSV出力</button>
         <button type="button" id="a-clip">クリップボードにコピー</button>
@@ -110,13 +122,7 @@
         <button type="button" id="a-demo" class="ghost">テストデータ入力</button>
       </div>
 
-      <div class="tree-wrap"><table class="tree" id="a-tree">
-        <thead><tr>
-          <th>#</th><th class="w-id">Sample_ID</th><th class="w-id">Sample_Name</th><th>Description</th>
-          <th>I7_Index_ID</th><th>index</th><th>I5_Index_ID</th><th>index2</th><th>Sample_Project</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table></div>
+      <div class="tree-wrap"><table class="tree" id="a-tree"><thead></thead><tbody></tbody></table></div>
       <div class="warn-box hidden" id="a-warn"></div>
     </section>
 
@@ -147,28 +153,34 @@
       </fieldset>
 
       <fieldset class="lf">
-        <legend>Index（Nextera）</legend>
+        <legend>Index（set 指定）</legend>
         <div class="param-grid">
           <span class="idx-label">Index1 / i7</span>
-          <label>開始:<select id="b-i7-start"></select></label>
-          <label>終了:<select id="b-i7-end"></select></label>
+          <label>開始 set:<input type="text" id="b-i7-start" size="12" placeholder="set1-1-1"></label>
+          <label>終了 set:<input type="text" id="b-i7-end" size="12" placeholder="set1-1-12"></label>
         </div>
         <div class="param-grid">
           <span class="idx-label">Index2 / i5</span>
-          <label>開始:<select id="b-i5-start"></select></label>
-          <label>終了:<select id="b-i5-end"></select></label>
+          <label>開始 set:<input type="text" id="b-i5-start" size="12" placeholder="set1-2-1"></label>
+          <label>終了 set:<input type="text" id="b-i5-end" size="12" placeholder="set1-2-12"></label>
         </div>
         <div class="param-grid">
           <span class="idx-count" id="b-count">—</span>
         </div>
-        <p class="hint">I7 を開始から終了まで順に巡回し、1巡するごとに I5 を次へ送ります（従来シートと同じ割当）。</p>
+        <p class="hint">MiSeq i100 と同じ set 指定を使用します。</p>
       </fieldset>
 
       <fieldset class="lf">
         <legend>[Data]（リストを貼り付け）</legend>
         <div class="text-cols two">
-          <label>Sample_ID（1行1件）<textarea id="b-ids" rows="12" spellcheck="false"></textarea></label>
-          <label>Description（1行1件）<textarea id="b-descs" rows="12" spellcheck="false"></textarea></label>
+          <div class="ta-field">
+            <span class="ta-title">Sample_ID（1行1件）</span>
+            <div class="ta-wrap"><div class="ta-gutter" id="b-ids-gutter"></div><textarea id="b-ids" rows="12" spellcheck="false" wrap="off"></textarea></div>
+          </div>
+          <div class="ta-field">
+            <span class="ta-title">Description（1行1件）</span>
+            <div class="ta-wrap"><div class="ta-gutter" id="b-descs-gutter"></div><textarea id="b-descs" rows="12" spellcheck="false" wrap="off"></textarea></div>
+          </div>
         </div>
         <div class="param-grid">
           <button type="button" id="b-fill-desc" class="ghost">Description を全行に一括入力</button>
@@ -182,17 +194,21 @@
             <option value="ids">Sample_ID</option>
             <option value="descs">Description</option>
           </select></label>
-          <label>行:<input type="number" id="b-suffix-from" size="4" min="1" value="1"></label>
-          <label>〜<input type="number" id="b-suffix-to" size="4" min="1" value="8"></label>
+          <label>行:<input type="number" id="b-suffix-from" min="1" value="1"></label>
+          <label>〜<input type="number" id="b-suffix-to" min="1" value="8"></label>
           <label>追加する文字列:<input type="text" id="b-suffix-text" size="14" placeholder="_16S"></label>
           <button type="button" id="b-suffix-apply">追加</button>
-          <button type="button" id="b-suffix-undo" class="ghost">元に戻す</button>
+          <button type="button" id="b-suffix-undo" class="ghost">付与前に戻す</button>
         </div>
+        <p class="hint">左側の行番号を参照して範囲を指定してください。「付与前に戻す」は、
+          この列に対して <b>最初に追加を行う前の状態</b> にまとめて戻します。</p>
       </fieldset>
 
       <div class="btnbar">
         <button type="button" id="b-build" class="primary">シート作成</button>
         <button type="button" id="b-clear">クリア</button>
+        <span class="vsep"></span>
+        <label class="chk"><input type="checkbox" id="b-with-set"> CSVにset名列を出力する</label>
         <span class="vsep"></span>
         <button type="button" id="b-csv">CSV出力</button>
         <button type="button" id="b-clip">クリップボードにコピー</button>
@@ -201,13 +217,7 @@
         <button type="button" id="b-demo" class="ghost">テストデータ入力</button>
       </div>
 
-      <div class="tree-wrap"><table class="tree" id="b-tree">
-        <thead><tr>
-          <th>#</th><th class="w-id">Sample_ID</th><th>Description</th>
-          <th>I7_Index_ID</th><th>index</th><th>I5_Index_ID</th><th>index2</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table></div>
+      <div class="tree-wrap"><table class="tree" id="b-tree"><thead></thead><tbody></tbody></table></div>
       <div class="warn-box hidden" id="b-warn"></div>
     </section>
 
@@ -216,26 +226,19 @@
       <fieldset class="lf">
         <legend>表示する index</legend>
         <div class="param-grid">
-          <label>種別:<select id="ref-kind">
-            <option value="udi">UDI index（MiSeq i100）</option>
-            <option value="nextera">Nextera index（MiSeq）</option>
-          </select></label>
-          <label class="udi-only">セット:<select id="ref-set">
+          <label>セット:<select id="ref-set">
             <option value="1">set1</option><option value="2">set2</option>
             <option value="3">set3</option><option value="4">set4</option>
           </select></label>
-          <label class="udi-only">側:<select id="ref-side">
+          <label>側:<select id="ref-side">
             <option value="1">Index1 / i7（setN-1-K）</option>
             <option value="2">Index2 / i5（setN-2-K）</option>
           </select></label>
-          <label class="nextera-only hidden">側:<select id="ref-nx-side">
-            <option value="i7">Index1 / i7（N7xx）</option>
-            <option value="i5">Index2 / i5（S5xx）</option>
-          </select></label>
         </div>
+        <p class="hint">1グループ = 8連チューブ1本（8 index）、1セット = 12グループ = 96 index。全4セットで 768 index。</p>
       </fieldset>
       <div class="tree-wrap"><table class="tree" id="ref-tree">
-        <thead><tr><th>ラベル</th><th>位置</th><th>Index_ID</th><th>index 配列</th></tr></thead>
+        <thead><tr><th>set名</th><th>ウェル</th><th>Index_ID</th><th>index 配列</th></tr></thead>
         <tbody></tbody>
       </table></div>
     </section>

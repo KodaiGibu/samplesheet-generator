@@ -1,10 +1,11 @@
-/* SampleSheet作成ツール — DNA希釈計算ツール v2.2 Web版と同じ配色・レイアウト */
+/* SampleSheet作成ツール */
 :root{
-  --brand:#2c5f8a;
-  --brand-dark:#22496b;
-  --accent:#e3f2fd;
+  --brand:#00bb85;
+  --brand-dark:#00996d;
+  --brand-pale:#e2f7f0;
+  --brand-line:#8fdcc6;
   --line:#c8d2dc;
-  --panel:#f0f0f0;
+  --panel:#f0f2f3;
   --text:#1f2933;
 }
 *{box-sizing:border-box}
@@ -12,86 +13,109 @@ html,body{height:100%}
 body{
   margin:0;display:flex;flex-direction:column;min-height:100vh;
   font-family:'Segoe UI','Hiragino Kaku Gothic ProN','Meiryo',system-ui,sans-serif;
-  font-size:14px;color:var(--text);background:#eef1f4;
+  font-size:14px;color:var(--text);background:#eef1f2;
 }
 .titlebar{background:var(--brand);color:#fff;padding:10px 16px}
 .titlebar h1{margin:0;font-size:1.05rem;font-weight:600}
-.titlebar .sub{font-size:.85rem;font-weight:400;opacity:.9;margin-left:4px}
-.app{flex:1;max-width:1420px;width:100%;margin:0 auto;padding:8px 10px 16px}
+.titlebar .sub{font-size:.85rem;font-weight:400;opacity:.92;margin-left:4px}
+.app{flex:1;max-width:1480px;width:100%;margin:0 auto;padding:8px 10px 16px}
 
 /* ── Notebook（タブ）── */
 .mode-nb{display:block}
 .nb-tabs{display:flex;gap:3px;flex-wrap:wrap}
 .nb-tab{
   font:inherit;padding:7px 18px;border:1px solid var(--line);border-bottom:none;
-  background:#dfe5ea;border-radius:5px 5px 0 0;cursor:pointer;
+  background:#dde3e5;border-radius:5px 5px 0 0;cursor:pointer;
 }
-.nb-tab.active{background:#fff;font-weight:600;color:var(--brand)}
+.nb-tab.active{background:#fff;font-weight:600;color:var(--brand-dark)}
 .nb-page{background:#fff;border:1px solid var(--line);border-radius:0 5px 5px 5px;padding:10px}
 
 /* ── LabelFrame ── */
 .lf{border:1px solid var(--line);border-radius:5px;padding:8px 12px;margin:0 0 6px;background:var(--panel)}
-.lf legend{padding:0 6px;font-weight:600;color:var(--brand);font-size:.92em}
-.lf.suffix-box{background:#fffbe6;border-color:#e8d98a}
-.lf.suffix-box legend{color:#8a6d00}
+.lf legend{padding:0 6px;font-weight:600;color:var(--brand-dark);font-size:.92em}
+.lf.suffix-box{background:var(--brand-pale);border-color:var(--brand-line)}
 .param-grid{display:flex;flex-wrap:wrap;gap:6px 20px;align-items:center;padding:3px 0}
 label{display:inline-flex;align-items:center;gap:6px;font-size:.93em}
+label.chk{gap:5px}
 input[type=text],input[type=number],select{
   font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:#fff;
 }
+input[type=text]:focus,input[type=number]:focus,select:focus,textarea:focus{
+  outline:2px solid var(--brand-line);outline-offset:-1px;
+}
 input[type=number]{width:5.5em}
-#a-i7-start,#a-i7-end,#a-i5-start,#a-i5-end{font-family:ui-monospace,'Consolas',monospace;font-size:.92em}
+input[type=checkbox]{accent-color:var(--brand)}
+#a-i7-start,#a-i7-end,#a-i5-start,#a-i5-end,
 #b-i7-start,#b-i7-end,#b-i5-start,#b-i5-end{font-family:ui-monospace,'Consolas',monospace;font-size:.92em}
 .idx-label{
-  display:inline-block;min-width:92px;font-size:.9em;font-weight:600;color:var(--brand);
-  background:var(--accent);border:1px solid #b8d4ea;border-radius:3px;padding:2px 10px;text-align:center;
+  display:inline-block;min-width:92px;font-size:.9em;font-weight:600;color:var(--brand-dark);
+  background:var(--brand-pale);border:1px solid var(--brand-line);border-radius:3px;
+  padding:2px 10px;text-align:center;
 }
-/* 種別切替で出し分ける項目 */
-.udi-only,.nextera-only{display:inline-flex}
 .hint{margin:4px 0 0;font-size:.82em;color:#5b6b7b}
 .hint code{background:#fff;border:1px solid var(--line);border-radius:3px;padding:0 4px;font-size:.95em}
 .idx-count{
-  font-size:.85em;color:#2b5d3a;background:#e8f5ec;border:1px solid #b6d9c2;
+  font-size:.85em;color:#006b4d;background:var(--brand-pale);border:1px solid var(--brand-line);
   border-radius:3px;padding:3px 10px;
 }
 .idx-count.bad{color:#8a2a22;background:#fdecea;border-color:#f0b5ae}
 
-/* ── Text 入力欄 ── */
+/* ── 行番号付きテキストエリア ── */
 .text-cols{display:grid;gap:8px}
 .text-cols.three{grid-template-columns:1fr 1fr 1fr}
 .text-cols.two{grid-template-columns:1fr 1fr}
-.text-cols label{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%}
-textarea{
-  font-family:ui-monospace,'Consolas','Courier New',monospace;font-size:.88em;width:100%;
-  padding:6px 8px;border:1px solid var(--line);border-radius:3px;white-space:pre;overflow:auto;resize:vertical;
+.ta-field{display:flex;flex-direction:column;gap:4px;width:100%}
+.ta-title{font-size:.86em}
+.ta-wrap{
+  display:flex;border:1px solid var(--line);border-radius:3px;background:#fff;overflow:hidden;
 }
+.ta-gutter{
+  flex:0 0 auto;min-width:3em;padding:6px 6px 6px 8px;margin:0;text-align:right;
+  background:#f3f6f7;border-right:1px solid var(--line);color:#8a97a3;
+  font-family:ui-monospace,'Consolas','Courier New',monospace;font-size:.88em;line-height:1.5;
+  white-space:pre;overflow:hidden;user-select:none;
+}
+.ta-wrap textarea{
+  flex:1 1 auto;border:none;border-radius:0;
+  font-family:ui-monospace,'Consolas','Courier New',monospace;font-size:.88em;line-height:1.5;
+  padding:6px 8px;white-space:pre;overflow:auto;resize:vertical;
+}
+.ta-wrap textarea:focus{outline:none}
+.ta-wrap:focus-within{outline:2px solid var(--brand-line);outline-offset:-1px}
 
 /* ── ボタンバー ── */
 .btnbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0}
 button{
   font:inherit;font-size:.92em;padding:5px 14px;border:1px solid var(--line);
-  border-radius:4px;background:#f5f7f9;cursor:pointer;
+  border-radius:4px;background:#f5f7f8;cursor:pointer;
 }
-button:hover{background:#e6ecf2}
+button:hover{background:var(--brand-pale)}
 button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
 button.primary:hover{background:var(--brand-dark)}
-button.ghost{background:transparent;border-style:dashed;color:var(--brand)}
+button.ghost{background:transparent;border-style:dashed;color:var(--brand-dark)}
 .vsep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
 
-/* ── Treeview 相当 ── */
+/* ── 結果テーブル ── */
 .tree-wrap{border:1px solid var(--line);border-radius:4px;overflow:auto;max-height:50vh;background:#fff}
 table.tree{border-collapse:collapse;width:100%;font-size:.88em}
 table.tree th{
   background:var(--brand);color:#fff;padding:7px 10px;position:sticky;top:0;z-index:1;white-space:nowrap;
 }
-table.tree th.w-id{min-width:180px;text-align:left}
+table.tree th.w-id{min-width:170px;text-align:left}
 table.tree td{border:1px solid #ccc;padding:5px 10px;text-align:center;white-space:nowrap}
 table.tree td.left{text-align:left}
-table.tree td.num{text-align:right;color:#6b7a89;background:#f7f9fb}
+table.tree td.num{text-align:right;color:#6b7a89;background:#f5f7f8}
 table.tree td.mono{font-family:ui-monospace,'Consolas',monospace;letter-spacing:.04em}
-table.tree td.strong{font-weight:600;color:var(--brand)}
-table.tree tbody tr:nth-child(even) td{background:#f9f9f9}
-table.tree tbody tr:nth-child(even) td.num{background:#f2f5f8}
+table.tree td.strong{font-weight:600;color:var(--brand-dark)}
+table.tree tbody tr:nth-child(even) td{background:#f9fafa}
+table.tree tbody tr:nth-child(even) td.num{background:#f0f3f4}
+
+/* set名列: CSV 出力対象なら強調、対象外なら淡色 */
+table.tree th.setcol.on{background:var(--brand-dark)}
+table.tree th.setcol.off{background:#8fa0ab}
+table.tree td.setcol{font-family:ui-monospace,'Consolas',monospace;font-size:.95em}
+table.tree td.setcol.on{background:var(--brand-pale) !important;color:#00634a;font-weight:600}
+table.tree td.setcol.off{background:#f2f4f5 !important;color:#8a97a3}
 
 /* ── 警告ボックス ── */
 .warn-box{
@@ -104,18 +128,18 @@ table.tree tbody tr:nth-child(even) td.num{background:#f2f5f8}
 
 /* ── ステータスバー ── */
 .statusbar{
-  border-top:1px solid #fff;border-bottom:1px solid #9aa5b1;background:#e2e6ea;
+  border-top:1px solid #fff;border-bottom:1px solid #9aa5b1;background:#e3e7e8;
   padding:6px 12px;font-size:.88em;color:#2b3742;box-shadow:inset 0 1px 2px rgba(0,0,0,.12);
 }
 .statusbar.error{color:#b3261e;font-weight:600}
 .hidden{display:none !important}
 
 /* ── ダイアログ ── */
-dialog{border:none;border-radius:8px;padding:16px 18px;width:min(760px,94vw);box-shadow:0 12px 40px rgba(0,0,0,.28)}
+dialog{border:none;border-radius:8px;padding:16px 18px;width:min(820px,94vw);box-shadow:0 12px 40px rgba(0,0,0,.28)}
 dialog::backdrop{background:rgba(0,0,0,.35)}
-dialog h2{margin:0 0 10px;font-size:1rem;color:var(--brand)}
+dialog h2{margin:0 0 10px;font-size:1rem;color:var(--brand-dark)}
 #preview-body{
-  margin:0;max-height:60vh;overflow:auto;background:#f7f9fb;border:1px solid var(--line);
+  margin:0;max-height:60vh;overflow:auto;background:#f6f8f8;border:1px solid var(--line);
   border-radius:4px;padding:10px 12px;font-family:ui-monospace,'Consolas',monospace;
   font-size:.82em;line-height:1.5;white-space:pre;
 }
