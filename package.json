@@ -1,0 +1,12 @@
+{
+  "name": "samplesheet-generator-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MiSeq / i100 GenerateFASTQ 用 SampleSheet CSV 作成ツール（UDI index set 指定対応）",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/sheet.test.mjs",
+    "dev": "npx --yes serve ."
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,123 @@
+/* SampleSheet作成ツール — DNA希釈計算ツール v2.2 Web版と同じ配色・レイアウト */
+:root{
+  --brand:#2c5f8a;
+  --brand-dark:#22496b;
+  --strip0:#e3f2fd;
+  --strip1:#fff9c4;
+  --warn:#ffd6d6;
+  --line:#c8d2dc;
+  --panel:#f0f0f0;
+  --text:#1f2933;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;display:flex;flex-direction:column;min-height:100vh;
+  font-family:'Segoe UI','Hiragino Kaku Gothic ProN','Meiryo',system-ui,sans-serif;
+  font-size:14px;color:var(--text);background:#eef1f4;
+}
+.titlebar{background:var(--brand);color:#fff;padding:10px 16px}
+.titlebar h1{margin:0;font-size:1.05rem;font-weight:600}
+.titlebar .sub{font-size:.85rem;font-weight:400;opacity:.9;margin-left:4px}
+.app{flex:1;max-width:1420px;width:100%;margin:0 auto;padding:8px 10px 16px}
+
+/* ── Notebook（タブ）── */
+.mode-nb{display:block}
+.nb-tabs{display:flex;gap:3px;flex-wrap:wrap}
+.nb-tab{
+  font:inherit;padding:7px 18px;border:1px solid var(--line);border-bottom:none;
+  background:#dfe5ea;border-radius:5px 5px 0 0;cursor:pointer;
+}
+.nb-tab.active{background:#fff;font-weight:600;color:var(--brand)}
+.nb-page{background:#fff;border:1px solid var(--line);border-radius:0 5px 5px 5px;padding:10px}
+
+/* ── LabelFrame ── */
+.lf{border:1px solid var(--line);border-radius:5px;padding:8px 12px;margin:0 0 6px;background:var(--panel)}
+.lf legend{padding:0 6px;font-weight:600;color:var(--brand);font-size:.92em}
+.param-grid{display:flex;flex-wrap:wrap;gap:6px 20px;align-items:center;padding:3px 0}
+label{display:inline-flex;align-items:center;gap:6px;font-size:.93em}
+label.chk{gap:5px}
+input[type=text],select{
+  font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:#fff;
+}
+#idx-i7,#idx-i5{font-family:ui-monospace,'Consolas',monospace;font-size:.92em}
+.hint{margin:4px 0 0;font-size:.82em;color:#5b6b7b}
+.hint code{background:#fff;border:1px solid var(--line);border-radius:3px;padding:0 4px;font-size:.95em}
+.idx-count{
+  font-size:.85em;color:#2b5d3a;background:#e8f5ec;border:1px solid #b6d9c2;
+  border-radius:3px;padding:3px 10px;
+}
+.idx-count.bad{color:#8a2a22;background:#fdecea;border-color:#f0b5ae}
+
+/* ── Text 入力欄 ── */
+.text-cols{display:grid;gap:8px}
+.text-cols.three{grid-template-columns:1fr 1fr 1fr}
+.text-cols label{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%}
+textarea{
+  font-family:ui-monospace,'Consolas','Courier New',monospace;font-size:.88em;width:100%;
+  padding:6px 8px;border:1px solid var(--line);border-radius:3px;white-space:pre;overflow:auto;resize:vertical;
+}
+
+/* ── ボタンバー ── */
+.btnbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0}
+button{
+  font:inherit;font-size:.92em;padding:5px 14px;border:1px solid var(--line);
+  border-radius:4px;background:#f5f7f9;cursor:pointer;
+}
+button:hover{background:#e6ecf2}
+button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+button.primary:hover{background:var(--brand-dark)}
+button.ghost{background:transparent;border-style:dashed;color:var(--brand)}
+.vsep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
+
+/* ── Treeview 相当 ── */
+.tree-wrap{border:1px solid var(--line);border-radius:4px;overflow:auto;max-height:50vh;background:#fff}
+table.tree{border-collapse:collapse;width:100%;font-size:.88em}
+table.tree th{
+  background:var(--brand);color:#fff;padding:7px 10px;position:sticky;top:0;z-index:1;white-space:nowrap;
+}
+table.tree th.w-id{min-width:180px;text-align:left}
+table.tree td{border:1px solid #ccc;padding:5px 10px;text-align:center;white-space:nowrap}
+table.tree td.left{text-align:left}
+table.tree td.num{text-align:right;color:#6b7a89;background:#f7f9fb}
+table.tree td.mono{font-family:ui-monospace,'Consolas',monospace;letter-spacing:.04em}
+table.tree td.strong{font-weight:600;color:var(--brand)}
+tbody tr.strip0 td{background:var(--strip0)}
+tbody tr.strip1 td{background:var(--strip1)}
+tbody tr.warn td{background:var(--warn)}
+tbody tr.strip0 td.num,tbody tr.strip1 td.num{background:#f7f9fb}
+
+/* ── 警告ボックス ── */
+.warn-box{
+  margin-top:10px;border:1px solid #e8d98a;background:#fffbe6;border-radius:5px;
+  padding:8px 14px;font-size:.86em;
+}
+.warn-box b{color:#8a6d00}
+.warn-box ul{margin:6px 0 0;padding-left:20px}
+.warn-box li{margin:2px 0}
+
+/* ── ステータスバー ── */
+.statusbar{
+  border-top:1px solid #fff;border-bottom:1px solid #9aa5b1;background:#e2e6ea;
+  padding:6px 12px;font-size:.88em;color:#2b3742;box-shadow:inset 0 1px 2px rgba(0,0,0,.12);
+}
+.statusbar.error{color:#b3261e;font-weight:600}
+.hidden{display:none !important}
+
+/* ── ダイアログ ── */
+dialog{border:none;border-radius:8px;padding:16px 18px;width:min(760px,94vw);box-shadow:0 12px 40px rgba(0,0,0,.28)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog h2{margin:0 0 10px;font-size:1rem;color:var(--brand)}
+#preview-body{
+  margin:0;max-height:60vh;overflow:auto;background:#f7f9fb;border:1px solid var(--line);
+  border-radius:4px;padding:10px 12px;font-family:ui-monospace,'Consolas',monospace;
+  font-size:.82em;line-height:1.5;white-space:pre;
+}
+.dlg-btns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.dlg-btns.center{justify-content:center;margin-top:14px}
+#msg-body{white-space:pre-wrap;font-size:.93em;margin:0}
+
+@media (max-width:980px){
+  .text-cols.three{grid-template-columns:1fr}
+  .app{padding:6px}
+}
