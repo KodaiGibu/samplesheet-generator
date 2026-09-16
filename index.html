@@ -51,21 +51,27 @@
 
       <fieldset class="lf">
         <legend>Index（set 指定）</legend>
-        <div class="param-grid">
-          <span class="idx-label">Index1 / i7</span>
-          <label>開始 set:<input type="text" id="a-i7-start" size="12" placeholder="set1-1-1"></label>
-          <label>終了 set:<input type="text" id="a-i7-end" size="12" placeholder="set1-1-12"></label>
+        <div class="range-block">
+          <div class="range-head">
+            <span class="idx-label">Index1 / i7</span>
+            <button type="button" class="mini" data-add-range="a-i7">＋ 範囲を追加</button>
+          </div>
+          <div class="range-rows" id="a-i7-rows"></div>
         </div>
-        <div class="param-grid">
-          <span class="idx-label">Index2 / i5</span>
-          <label>開始 set:<input type="text" id="a-i5-start" size="12" placeholder="set1-2-1"></label>
-          <label>終了 set:<input type="text" id="a-i5-end" size="12" placeholder="set1-2-12"></label>
+        <div class="range-block">
+          <div class="range-head">
+            <span class="idx-label">Index2 / i5</span>
+            <button type="button" class="mini" data-add-range="a-i5">＋ 範囲を追加</button>
+          </div>
+          <div class="range-rows" id="a-i5-rows"></div>
         </div>
         <div class="param-grid">
           <span class="idx-count" id="a-count">—</span>
         </div>
         <p class="hint">1つの set（例 <code>set1-1-3</code>）＝ 8連チューブ1本分の 8 index。
-          終了 set を空欄にすると開始 set のみ（8 index）、<code>12</code> のように番号だけでも指定できます。</p>
+          終了 set を空欄にすると開始 set のみ（8 index）、<code>12</code> のように番号だけでも指定できます。<br>
+          <b>複数セットの指定</b>: <code>set1-1-10</code> 〜 <code>set2-1-3</code> のようにセットをまたいだ範囲を直接指定できます
+          （set1-1-12 の次は set2-1-1 として連続展開）。連続しないセットを組み合わせる場合は「＋ 範囲を追加」で行を増やしてください。</p>
       </fieldset>
 
       <fieldset class="lf">
@@ -154,20 +160,24 @@
 
       <fieldset class="lf">
         <legend>Index（set 指定）</legend>
-        <div class="param-grid">
-          <span class="idx-label">Index1 / i7</span>
-          <label>開始 set:<input type="text" id="b-i7-start" size="12" placeholder="set1-1-1"></label>
-          <label>終了 set:<input type="text" id="b-i7-end" size="12" placeholder="set1-1-12"></label>
+        <div class="range-block">
+          <div class="range-head">
+            <span class="idx-label">Index1 / i7</span>
+            <button type="button" class="mini" data-add-range="b-i7">＋ 範囲を追加</button>
+          </div>
+          <div class="range-rows" id="b-i7-rows"></div>
         </div>
-        <div class="param-grid">
-          <span class="idx-label">Index2 / i5</span>
-          <label>開始 set:<input type="text" id="b-i5-start" size="12" placeholder="set1-2-1"></label>
-          <label>終了 set:<input type="text" id="b-i5-end" size="12" placeholder="set1-2-12"></label>
+        <div class="range-block">
+          <div class="range-head">
+            <span class="idx-label">Index2 / i5</span>
+            <button type="button" class="mini" data-add-range="b-i5">＋ 範囲を追加</button>
+          </div>
+          <div class="range-rows" id="b-i5-rows"></div>
         </div>
         <div class="param-grid">
           <span class="idx-count" id="b-count">—</span>
         </div>
-        <p class="hint">MiSeq i100 と同じ set 指定を使用します。</p>
+        <p class="hint">MiSeq i100 と同じ set 指定を使用します。セットをまたぐ範囲指定・複数範囲の追加にも対応しています。</p>
       </fieldset>
 
       <fieldset class="lf">

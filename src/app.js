@@ -8,7 +8,7 @@
  */
 import {
   APP_TITLE, DEFAULTS_I100, DEFAULTS_MISEQ,
-  normalizeDate, expandSetRange, groupIndexes, splitRows, appendSuffix,
+  normalizeDate, expandSetRanges, groupIndexes, splitRows, appendSuffix,
   buildRowsI100, buildRowsMiSeq, buildCsvI100, buildCsvMiSeq,
   csvFileName, dataHeader, tableHeader, SET_COLUMNS,
 } from './sheet.js';
@@ -206,20 +206,96 @@ $('a-reset').addEventListener('click', () => {
   setStatus('[Header] / [Settings] を既定値に戻しました');
 });
 
+// ══ Index 範囲ブロック（複数セット対応）══
+
+/** 範囲ブロックの入力値を配列で取得する。例: readRanges('a-i7') */
+function readRanges(key) {
+  return [...$(`${key}-rows`).querySelectorAll('.range-row')].map((row) => ({
+    start: row.querySelector('.r-start').value,
+    end: row.querySelector('.r-end').value,
+  }));
+}
+
+/** 範囲ブロックを1行追加する */
+function addRangeRow(key, start = '', end = '') {
+  const rows = $(`${key}-rows`);
+  const side = key.endsWith('i7') ? 1 : 2;
+  const row = document.createElement('div');
+  row.className = 'range-row';
+  row.innerHTML = `
+    <span class="r-no"></span>
+    <label>開始 set:<input type="text" class="r-start" size="12" placeholder="set1-${side}-1"></label>
+    <label>終了 set:<input type="text" class="r-end" size="12" placeholder="set1-${side}-12"></label>
+    <span class="r-info"></span>
+    <button type="button" class="mini danger r-del" title="この範囲を削除">×</button>`;
+  row.querySelector('.r-start').value = start;
+  row.querySelector('.r-end').value = end;
+  rows.appendChild(row);
+
+  const prefix = key.slice(0, 1);
+  row.querySelectorAll('input').forEach((inp) => {
+    inp.addEventListener('input', () => refreshCount(prefix));
+  });
+  row.querySelector('.r-del').addEventListener('click', () => {
+    if (rows.querySelectorAll('.range-row').length <= 1) {
+      row.querySelector('.r-start').value = '';
+      row.querySelector('.r-end').value = '';
+    } else {
+      row.remove();
+    }
+    refreshCount(prefix);
+  });
+  renumberRanges(key);
+  return row;
+}
+
+/** 行番号と各範囲の件数表示を更新する */
+function renumberRanges(key) {
+  const rows = [...$(`${key}-rows`).querySelectorAll('.range-row')];
+  const label = key.endsWith('i7') ? 'Index1 (i7)' : 'Index2 (i5)';
+  rows.forEach((row, i) => {
+    row.querySelector('.r-no').textContent = rows.length > 1 ? `範囲${i + 1}` : '';
+    const info = row.querySelector('.r-info');
+    const start = row.querySelector('.r-start').value.trim();
+    const end = row.querySelector('.r-end').value.trim();
+    if (start === '' && end === '') { info.textContent = ''; info.classList.remove('bad'); return; }
+    try {
+      const n = expandSetRanges([{ start, end }], label).indexes.length;
+      info.textContent = `${n} index`;
+      info.classList.remove('bad');
+    } catch { info.textContent = '指定エラー'; info.classList.add('bad'); }
+  });
+}
+
+/** 範囲ブロックを初期化（1行だけにして値を設定） */
+function resetRanges(key, start = '', end = '') {
+  $(`${key}-rows`).innerHTML = '';
+  addRangeRow(key, start, end);
+}
+
+document.querySelectorAll('[data-add-range]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.addRange;
+    addRangeRow(key);
+    refreshCount(key.slice(0, 1));
+    setStatus(`${key.endsWith('i7') ? 'Index1 (i7)' : 'Index2 (i5)'} に範囲を追加しました`);
+  });
+});
+
 function refreshCount(prefix) {
   const el = $(`${prefix}-count`);
+  renumberRanges(`${prefix}-i7`);
+  renumberRanges(`${prefix}-i5`);
   try {
-    const n7 = expandSetRange($(`${prefix}-i7-start`).value, $(`${prefix}-i7-end`).value, 'Index1 (i7)').length;
-    const n5 = expandSetRange($(`${prefix}-i5-start`).value, $(`${prefix}-i5-end`).value, 'Index2 (i5)').length;
+    const n7 = expandSetRanges(readRanges(`${prefix}-i7`), 'Index1 (i7)').indexes.length;
+    const n5 = expandSetRanges(readRanges(`${prefix}-i5`), 'Index2 (i5)').indexes.length;
     const nId = splitRows($(`${prefix}-ids`).value).filter((s) => s !== '').length;
     el.classList.remove('bad');
     el.textContent = `i7: ${n7} 件 / i5: ${n5} 件 / Sample_ID: ${nId} 件`;
     if (nId && (n7 < nId || n5 < nId)) el.classList.add('bad');
   } catch (e) { el.classList.add('bad'); el.textContent = e.message; }
 }
-['a-i7-start', 'a-i7-end', 'a-i5-start', 'a-i5-end', 'a-ids'].forEach((id) => {
-  $(id).addEventListener('input', () => refreshCount('a'));
-});
+$('a-ids').addEventListener('input', () => refreshCount('a'));
 
 $('a-names').addEventListener('input', () => { app.i100.namesTouched = true; });
 $('a-ids').addEventListener('input', () => {
@@ -270,8 +346,8 @@ $('a-build').addEventListener('click', async () => {
       sampleIds: $('a-ids').value,
       sampleNames: $('a-names').value,
       descriptions: $('a-descs').value,
-      i7Start: $('a-i7-start').value, i7End: $('a-i7-end').value,
-      i5Start: $('a-i5-start').value, i5End: $('a-i5-end').value,
+      i7Ranges: readRanges('a-i7'),
+      i5Ranges: readRanges('a-i5'),
       sampleProject: $('a-project').value,
     });
   } catch (e) { await showMessage('入力エラー', e.message); return; }
@@ -287,7 +363,7 @@ $('a-build').addEventListener('click', async () => {
 
 $('a-clear').addEventListener('click', () => {
   ['a-ids', 'a-names', 'a-descs'].forEach((id) => setTextareaValue(id, ''));
-  ['a-i7-start', 'a-i7-end', 'a-i5-start', 'a-i5-end'].forEach((id) => { $(id).value = ''; });
+  resetRanges('a-i7'); resetRanges('a-i5');
   app.i100 = { rows: [], params: null, namesTouched: false, baseline: {} };
   renderRows('a-tree', [], 'i100', $('a-with-set').checked);
   renderWarnings('a-warn', []); refreshCount('a');
@@ -323,8 +399,8 @@ $('a-demo').addEventListener('click', () => {
   const d = new Date();
   $('a-date').value = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
   $('a-exp').value = 'eDNA-demo-run';
-  $('a-i7-start').value = 'set1-1-1'; $('a-i7-end').value = 'set1-1-2';
-  $('a-i5-start').value = 'set1-2-1'; $('a-i5-end').value = 'set1-2-2';
+  resetRanges('a-i7', 'set1-1-1', 'set1-1-2');
+  resetRanges('a-i5', 'set1-2-1', 'set1-2-2');
   const ids = []; const descs = [];
   for (let i = 1; i <= 8; i += 1) { ids.push(`Demo-Reef-${String(i).padStart(2, '0')}`); descs.push('Reef water (demo)'); }
   for (let i = 1; i <= 8; i += 1) { ids.push(`Demo-Sand-${String(i).padStart(2, '0')}`); descs.push('Sediment (demo)'); }
@@ -354,9 +430,7 @@ $('b-reset').addEventListener('click', () => {
   setStatus('[Header] / [Settings] を既定値に戻しました');
 });
 
-['b-i7-start', 'b-i7-end', 'b-i5-start', 'b-i5-end', 'b-ids'].forEach((id) => {
-  $(id).addEventListener('input', () => refreshCount('b'));
-});
+$('b-ids').addEventListener('input', () => refreshCount('b'));
 $('b-fill-desc').addEventListener('click', () => fillDescription('b-ids', 'b-descs'));
 
 const MISEQ_TARGETS = { ids: 'b-ids', descs: 'b-descs' };
@@ -394,8 +468,8 @@ $('b-build').addEventListener('click', async () => {
     result = buildRowsMiSeq({
       sampleIds: $('b-ids').value,
       descriptions: $('b-descs').value,
-      i7Start: $('b-i7-start').value, i7End: $('b-i7-end').value,
-      i5Start: $('b-i5-start').value, i5End: $('b-i5-end').value,
+      i7Ranges: readRanges('b-i7'),
+      i5Ranges: readRanges('b-i5'),
     });
   } catch (e) { await showMessage('入力エラー', e.message); return; }
 
@@ -410,7 +484,7 @@ $('b-build').addEventListener('click', async () => {
 
 $('b-clear').addEventListener('click', () => {
   ['b-ids', 'b-descs'].forEach((id) => setTextareaValue(id, ''));
-  ['b-i7-start', 'b-i7-end', 'b-i5-start', 'b-i5-end'].forEach((id) => { $(id).value = ''; });
+  resetRanges('b-i7'); resetRanges('b-i5');
   app.miseq = { rows: [], params: null, baseline: {} };
   renderRows('b-tree', [], 'miseq', $('b-with-set').checked);
   renderWarnings('b-warn', []); refreshCount('b');
@@ -440,8 +514,8 @@ $('b-demo').addEventListener('click', () => {
   const d = new Date();
   $('b-date').value = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
   $('b-exp').value = 'demo-bacteria-run';
-  $('b-i7-start').value = 'set1-1-1'; $('b-i7-end').value = 'set1-1-2';
-  $('b-i5-start').value = 'set1-2-1'; $('b-i5-end').value = 'set1-2-2';
+  resetRanges('b-i7', 'set1-1-1', 'set1-1-2');
+  resetRanges('b-i5', 'set1-2-1', 'set1-2-2');
   const ids = []; const descs = [];
   for (let i = 1; i <= 8; i += 1) { ids.push(`Demo-Coral-${String(i).padStart(2, '0')}`); descs.push('Coral polyp (demo)'); }
   for (let i = 1; i <= 8; i += 1) { ids.push(`Demo-Water-${String(i).padStart(2, '0')}`); descs.push('Tank water (demo)'); }
@@ -482,6 +556,7 @@ applyDefaultsI100();
 applyDefaultsMiSeq();
 [['a-ids', 'a-ids-gutter'], ['a-names', 'a-names-gutter'], ['a-descs', 'a-descs-gutter'],
   ['b-ids', 'b-ids-gutter'], ['b-descs', 'b-descs-gutter']].forEach(([t, g]) => attachGutter(t, g));
+['a-i7', 'a-i5', 'b-i7', 'b-i5'].forEach((k) => resetRanges(k));
 renderRows('a-tree', [], 'i100', false);
 renderRows('b-tree', [], 'miseq', false);
 refreshCount('a');

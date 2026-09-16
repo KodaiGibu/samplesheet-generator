@@ -45,8 +45,29 @@ input[type=text]:focus,input[type=number]:focus,select:focus,textarea:focus{
 }
 input[type=number]{width:5.5em}
 input[type=checkbox]{accent-color:var(--brand)}
-#a-i7-start,#a-i7-end,#a-i5-start,#a-i5-end,
-#b-i7-start,#b-i7-end,#b-i5-start,#b-i5-end{font-family:ui-monospace,'Consolas',monospace;font-size:.92em}
+.range-row input,.range-row .r-start,.range-row .r-end{font-family:ui-monospace,'Consolas',monospace;font-size:.92em}
+
+/* ── Index 範囲ブロック（複数セット対応）── */
+.range-block{padding:3px 0}
+.range-head{display:flex;align-items:center;gap:10px;padding:2px 0}
+.range-rows{display:flex;flex-direction:column;gap:4px;margin:2px 0 4px 0}
+.range-row{
+  display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;
+  padding:3px 8px;background:#fff;border:1px solid var(--line);border-radius:3px;
+}
+.range-row .r-no{
+  min-width:3.6em;font-size:.8em;font-weight:600;color:var(--brand-dark);
+}
+.range-row .r-info{font-size:.8em;color:#6b7a89;min-width:5em}
+.range-row .r-info.bad{color:#b3261e;font-weight:600}
+button.mini{
+  font-size:.8em;padding:2px 10px;border-radius:3px;
+  color:var(--brand-dark);background:var(--brand-pale);border-color:var(--brand-line);
+}
+button.mini:hover{background:#cdefe4}
+button.mini.danger{color:#8a2a22;background:#fdecea;border-color:#f0b5ae;font-weight:700;padding:2px 8px}
+button.mini.danger:hover{background:#f9d9d5}
+.range-row .r-del{margin-left:auto}
 .idx-label{
   display:inline-block;min-width:92px;font-size:.9em;font-weight:600;color:var(--brand-dark);
   background:var(--brand-pale);border:1px solid var(--brand-line);border-radius:3px;

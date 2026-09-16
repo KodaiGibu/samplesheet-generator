@@ -7,7 +7,7 @@
  *
  * 依存なしの ES Module。ブラウザ / Node の両方から import 可能。
  */
-import { UDI_INDEX, GROUP_SIZE, GROUP_COUNT } from './udi-data.js';
+import { UDI_INDEX, GROUP_SIZE, GROUP_COUNT, SET_NUMBERS } from './udi-data.js';
 
 export const APP_TITLE = 'SampleSheet作成ツール（GenerateFASTQ）';
 
@@ -102,7 +102,7 @@ export function normalizeDate(text) {
 
 // ══ set 指定（UDI index）══
 
-export { GROUP_SIZE, GROUP_COUNT };
+export { GROUP_SIZE, GROUP_COUNT, SET_NUMBERS };
 
 const SET_RE = /^set([1-4])-([12])-(\d{1,2})$/i;
 
@@ -134,8 +134,31 @@ export function groupIndexes(set, side, group) {
 }
 
 /**
+ * set をセット番号順・グループ順に並べたときの通し位置（0 始まり）。
+ * set1-*-1 → 0, set1-*-12 → 11, set2-*-1 → 12 ... set4-*-12 → 47
+ */
+export function setOrdinal({ set, group }) {
+  return (set - 1) * GROUP_COUNT + (group - 1);
+}
+
+/** 通し位置から {set, group} に戻す */
+export function ordinalToSet(ordinal) {
+  return {
+    set: Math.floor(ordinal / GROUP_COUNT) + 1,
+    group: (ordinal % GROUP_COUNT) + 1,
+  };
+}
+
+/** 収録されている全グループ数（4セット × 12グループ） */
+export const TOTAL_GROUPS = SET_NUMBERS.length * GROUP_COUNT;
+
+/**
  * 開始 set と終了 set を別々に受け取り、その範囲の index を展開する。
- * 終了側は "set1-1-12" でも "12" でも可。終了が空なら開始のみ（8件）。
+ *
+ * - 終了側は "set2-1-3" でも "3"（同一セット内の省略形）でも可。終了が空なら開始のみ（8件）。
+ * - **セットをまたぐ指定に対応**: 開始と終了のセット番号が異なる場合、
+ *   set1-1-12 の次を set2-1-1 として連続的に展開する（側 side は一致している必要がある）。
+ *   例: set1-1-10 〜 set2-1-3 → set1-1-10,11,12 + set2-1-1,2,3 の 48 index
  */
 export function expandSetRange(startToken, endToken, labelForError = 'Index') {
   const s = String(startToken ?? '').trim();
@@ -155,15 +178,50 @@ export function expandSetRange(startToken, endToken, labelForError = 'Index') {
   } else {
     b = parseSetToken(e);
   }
-  if (a.set !== b.set || a.side !== b.side) {
-    throw new Error(`${labelForError} の開始と終了は同じセット・同じ側で指定してください（${s} / ${e}）。`);
+  if (a.side !== b.side) {
+    throw new Error(`${labelForError} の開始と終了は同じ側（i7 どうし / i5 どうし）で指定してください（${s} / ${e}）。`);
   }
-  if (b.group < a.group) {
+  const from = setOrdinal(a);
+  const to = setOrdinal(b);
+  if (to < from) {
     throw new Error(`${labelForError} の終了 set が開始より前です（${s} / ${e}）。`);
   }
   const out = [];
-  for (let g = a.group; g <= b.group; g += 1) out.push(...groupIndexes(a.set, a.side, g));
+  for (let o = from; o <= to; o += 1) {
+    const { set, group } = ordinalToSet(o);
+    out.push(...groupIndexes(set, a.side, group));
+  }
   return out;
+}
+
+/**
+ * 複数の範囲ブロックをまとめて展開し、指定順に連結する。
+ * @param {{start:string, end:string}[]} ranges
+ * @returns {{indexes:Array, warnings:string[]}}
+ * @throws {Error} 範囲内・範囲間で index が重複した場合など
+ */
+export function expandSetRanges(ranges, labelForError = 'Index') {
+  const list = (ranges ?? []).filter((r) => String(r.start ?? '').trim() !== ''
+    || String(r.end ?? '').trim() !== '');
+  if (!list.length) return { indexes: [], warnings: [] };
+
+  const out = [];
+  const seen = new Map();          // Index_ID → 何番目のブロックで使ったか
+  const warnings = [];
+  list.forEach((r, bi) => {
+    const part = expandSetRange(r.start, r.end, `${labelForError} の範囲${bi + 1}`);
+    part.forEach((x) => {
+      if (seen.has(x.id)) {
+        throw new Error(`${labelForError} で index が重複しています: ${x.id}（範囲${seen.get(x.id) + 1} と 範囲${bi + 1}）。`);
+      }
+      seen.set(x.id, bi);
+      out.push(x);
+    });
+  });
+  if (list.length > 1) {
+    warnings.push(`${labelForError} は ${list.length} 個の範囲を指定順に連結しました（計 ${out.length}件）。`);
+  }
+  return { indexes: out, warnings };
 }
 
 // ══ 行のリスト入力 ══
@@ -206,18 +264,18 @@ export function appendSuffix(text, from, to, suffix) {
 
 /**
  * MiSeq i100 用の行を構築する。
+ * index は i7Ranges / i5Ranges（範囲ブロックの配列）または
+ * i7Start / i7End（単一範囲）のいずれの形式でも受け付ける。
  * @returns {{rows:Object[], warnings:string[]}}
  */
-export function buildRowsI100({
-  sampleIds, sampleNames, descriptions,
-  i7Start, i7End, i5Start, i5End, sampleProject,
-}) {
+export function buildRowsI100(opts) {
+  const { sampleIds, sampleNames, descriptions, sampleProject } = opts;
   const ids = splitRows(sampleIds).filter((s) => s !== '');
   if (!ids.length) throw new Error('Sample_ID を入力してください。');
 
   const names = splitRows(sampleNames);
   const descs = splitRows(descriptions);
-  const { i7, i5, warnings } = resolveIndexes(ids, i7Start, i7End, i5Start, i5End);
+  const { i7, i5, warnings } = resolveIndexes(ids, opts);
 
   if (descs.length && descs.length !== ids.length) {
     throw new Error(`Sample_ID (${ids.length}行) と Description (${descs.length}行) の行数が不一致。`);
@@ -244,14 +302,13 @@ export function buildRowsI100({
  * MiSeq（従来機）用の行を構築する。index は i100 と同じ UDI set 指定。
  * @returns {{rows:Object[], warnings:string[]}}
  */
-export function buildRowsMiSeq({
-  sampleIds, descriptions, i7Start, i7End, i5Start, i5End,
-}) {
+export function buildRowsMiSeq(opts) {
+  const { sampleIds, descriptions } = opts;
   const ids = splitRows(sampleIds).filter((s) => s !== '');
   if (!ids.length) throw new Error('Sample_ID を入力してください。');
 
   const descs = splitRows(descriptions);
-  const { i7, i5, warnings } = resolveIndexes(ids, i7Start, i7End, i5Start, i5End);
+  const { i7, i5, warnings } = resolveIndexes(ids, opts);
 
   if (descs.length && descs.length !== ids.length) {
     throw new Error(`Sample_ID (${ids.length}行) と Description (${descs.length}行) の行数が不一致。`);
@@ -272,10 +329,26 @@ export function buildRowsMiSeq({
   return { rows, warnings };
 }
 
+/**
+ * 引数を範囲ブロックの配列へ正規化する。
+ * 単一範囲（i7Start / i7End）と配列（i7Ranges）の両方の呼び出し方に対応する。
+ */
+export function toRanges(ranges, start, end) {
+  if (Array.isArray(ranges) && ranges.length) return ranges;
+  if (String(start ?? '').trim() !== '' || String(end ?? '').trim() !== '') {
+    return [{ start: start ?? '', end: end ?? '' }];
+  }
+  return [];
+}
+
 /** i7 / i5 の展開と件数チェック（両機種で共通） */
-function resolveIndexes(ids, i7Start, i7End, i5Start, i5End) {
-  const i7 = expandSetRange(i7Start, i7End, 'Index1 (i7)');
-  const i5 = expandSetRange(i5Start, i5End, 'Index2 (i5)');
+function resolveIndexes(ids, opts) {
+  const r7 = toRanges(opts.i7Ranges, opts.i7Start, opts.i7End);
+  const r5 = toRanges(opts.i5Ranges, opts.i5Start, opts.i5End);
+  const a = expandSetRanges(r7, 'Index1 (i7)');
+  const b = expandSetRanges(r5, 'Index2 (i5)');
+  const i7 = a.indexes;
+  const i5 = b.indexes;
   if (!i7.length) throw new Error('Index1 (i7) の set を指定してください。');
   if (!i5.length) throw new Error('Index2 (i5) の set を指定してください。');
   if (i7.length < ids.length) {
@@ -284,7 +357,7 @@ function resolveIndexes(ids, i7Start, i7End, i5Start, i5End) {
   if (i5.length < ids.length) {
     throw new Error(`Index2 (i5) が不足しています（サンプル ${ids.length}件 に対し ${i5.length}件）。`);
   }
-  const warnings = [];
+  const warnings = [...a.warnings, ...b.warnings];
   if (i7.length > ids.length) warnings.push(`Index1 は ${i7.length - ids.length}件 余っています（先頭から順に割当）。`);
   if (i5.length > ids.length) warnings.push(`Index2 は ${i5.length - ids.length}件 余っています（先頭から順に割当）。`);
   return { i7, i5, warnings };

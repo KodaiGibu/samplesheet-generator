@@ -5,7 +5,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeDate, parseSetToken, expandSetRange, groupIndexes,
+  normalizeDate, parseSetToken, expandSetRange, expandSetRanges, groupIndexes,
+  setOrdinal, ordinalToSet, toRanges, TOTAL_GROUPS,
   buildRowsI100, buildRowsMiSeq, buildCsvI100, buildCsvMiSeq,
   csvFileName, splitRows, appendSuffix, dataHeader, tableHeader,
   DATA_HEADER_I100, DATA_HEADER_MISEQ,
@@ -49,9 +50,108 @@ test('set 範囲: 異常系', () => {
   assert.throws(() => expandSetRange('set5-1-1', ''), /指定形式が不正/);
   assert.throws(() => expandSetRange('set1-1-13', ''), /グループ番号は 1〜12/);
   assert.throws(() => expandSetRange('set1-1-3', 'set1-1-1'), /終了 set が開始より前/);
-  assert.throws(() => expandSetRange('set1-1-1', 'set1-2-3'), /同じセット・同じ側/);
+  assert.throws(() => expandSetRange('set1-1-1', 'set1-2-3'), /同じ側/);
   assert.throws(() => expandSetRange('', 'set1-1-3'), /開始 set を入力/);
   assert.throws(() => parseSetToken('set1-1'), /指定形式が不正/);
+});
+
+// ══ 複数セットへの対応 ══
+test('通し位置の相互変換', () => {
+  assert.equal(TOTAL_GROUPS, 48);
+  assert.equal(setOrdinal({ set: 1, group: 1 }), 0);
+  assert.equal(setOrdinal({ set: 1, group: 12 }), 11);
+  assert.equal(setOrdinal({ set: 2, group: 1 }), 12);
+  assert.equal(setOrdinal({ set: 4, group: 12 }), 47);
+  assert.deepEqual(ordinalToSet(0), { set: 1, group: 1 });
+  assert.deepEqual(ordinalToSet(12), { set: 2, group: 1 });
+  assert.deepEqual(ordinalToSet(47), { set: 4, group: 12 });
+});
+
+test('セットをまたぐ範囲指定（set1 → set2）', () => {
+  const r = expandSetRange('set1-1-10', 'set2-1-3');
+  assert.equal(r.length, 48); // set1 の 10,11,12 + set2 の 1,2,3 = 6グループ
+  assert.equal(r[0].groupLabel, 'set1-1-10');
+  assert.equal(r[23].groupLabel, 'set1-1-12');
+  assert.equal(r[24].groupLabel, 'set2-1-1');
+  assert.deepEqual([r[24].id, r[24].seq], ['P7126', 'CACTGTAG']);
+  assert.equal(r[47].groupLabel, 'set2-1-3');
+});
+
+test('全セットを通した最大範囲', () => {
+  const all = expandSetRange('set1-1-1', 'set4-1-12');
+  assert.equal(all.length, 384); // 4セット × 96
+  assert.equal(all[0].groupLabel, 'set1-1-1');
+  assert.equal(all[95].groupLabel, 'set1-1-12');
+  assert.equal(all[96].groupLabel, 'set2-1-1');
+  assert.equal(all[383].groupLabel, 'set4-1-12');
+});
+
+test('セット跨ぎでも側の不一致はエラー', () => {
+  assert.throws(() => expandSetRange('set1-1-10', 'set2-2-3'), /同じ側/);
+  assert.throws(() => expandSetRange('set2-1-1', 'set1-1-5'), /終了 set が開始より前/);
+});
+
+test('複数の範囲ブロックを指定順に連結する', () => {
+  const { indexes, warnings } = expandSetRanges([
+    { start: 'set1-1-1', end: 'set1-1-2' },
+    { start: 'set3-1-5', end: 'set3-1-5' },
+  ], 'Index1 (i7)');
+  assert.equal(indexes.length, 24);
+  assert.equal(indexes[0].groupLabel, 'set1-1-1');
+  assert.equal(indexes[15].groupLabel, 'set1-1-2');
+  assert.equal(indexes[16].groupLabel, 'set3-1-5');
+  assert.ok(warnings.some((w) => /2 個の範囲/.test(w)));
+});
+
+test('範囲ブロック: 空欄はスキップ、重複はエラー', () => {
+  const { indexes } = expandSetRanges([
+    { start: '', end: '' },
+    { start: 'set1-1-1', end: '' },
+    { start: '', end: '' },
+  ]);
+  assert.equal(indexes.length, 8);
+  assert.throws(() => expandSetRanges([
+    { start: 'set1-1-1', end: 'set1-1-3' },
+    { start: 'set1-1-2', end: '' },
+  ], 'Index1 (i7)'), /index が重複しています/);
+  assert.equal(expandSetRanges([]).indexes.length, 0);
+});
+
+test('toRanges: 単一範囲と配列の両方を受け付ける', () => {
+  assert.deepEqual(toRanges(null, 'set1-1-1', 'set1-1-3'),
+    [{ start: 'set1-1-1', end: 'set1-1-3' }]);
+  assert.deepEqual(toRanges([{ start: 'set2-1-1', end: '' }], '', ''),
+    [{ start: 'set2-1-1', end: '' }]);
+  assert.deepEqual(toRanges([], '', ''), []);
+});
+
+test('i100: 複数セットにまたがるシート作成', () => {
+  const ids = Array.from({ length: 120 }, (_, i) => `S${i + 1}`).join('\n');
+  const { rows } = buildRowsI100({
+    sampleIds: ids, sampleNames: '', descriptions: '', sampleProject: '',
+    i7Ranges: [{ start: 'set1-1-1', end: 'set2-1-3' }],
+    i5Ranges: [{ start: 'set1-2-1', end: 'set2-2-3' }],
+  });
+  assert.equal(rows.length, 120);
+  assert.equal(rows[0].Index1_Set, 'set1-1-1-1');
+  assert.deepEqual([rows[95].I7_Index_ID, rows[95].index], ['S733', 'CCACAACA']);
+  assert.equal(rows[96].Index1_Set, 'set2-1-1-1');
+  assert.deepEqual([rows[96].I7_Index_ID, rows[96].index], ['P7126', 'CACTGTAG']);
+  assert.deepEqual([rows[96].I5_Index_ID, rows[96].index2], ['P5134', 'AAGCGACT']);
+});
+
+test('MiSeq: 複数の範囲ブロックを使ったシート作成', () => {
+  const ids = Array.from({ length: 24 }, (_, i) => `S${i + 1}`).join('\n');
+  const { rows, warnings } = buildRowsMiSeq({
+    sampleIds: ids, descriptions: '',
+    i7Ranges: [{ start: 'set1-1-1', end: 'set1-1-2' }, { start: 'set2-1-1', end: '' }],
+    i5Ranges: [{ start: 'set1-2-1', end: 'set1-2-2' }, { start: 'set2-2-1', end: '' }],
+  });
+  assert.equal(rows.length, 24);
+  assert.equal(rows[15].Index1_Set, 'set1-1-2-8');
+  assert.equal(rows[16].Index1_Set, 'set2-1-1-1');
+  assert.deepEqual([rows[16].I7_Index_ID, rows[16].index], ['P7126', 'CACTGTAG']);
+  assert.ok(warnings.some((w) => /2 個の範囲/.test(w)));
 });
 
 test('groupIndexes は set名ラベル付きで8件返す', () => {
