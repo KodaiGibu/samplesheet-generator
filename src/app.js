@@ -17,7 +17,7 @@ const $ = (id) => document.getElementById(id);
 
 const app = {
   mode: 'i100',
-  i100: { rows: [], params: null, namesTouched: false, baseline: {} },
+  i100: { rows: [], params: null, baseline: {} },
   miseq: { rows: [], params: null, baseline: {} },
 };
 
@@ -125,7 +125,7 @@ function renderRows(treeId, rows, machine, withSetNames) {
       th.className = withSetNames ? 'setcol on' : 'setcol off';
       th.title = withSetNames ? 'CSVに出力されます' : 'CSVには出力されません（画面表示のみ）';
     }
-    if (k === 'Sample_ID' || k === 'Sample_Name') th.classList.add('w-id');
+    if (k === 'Sample_ID' || k === 'Sample_Name' || k === 'LibraryName') th.classList.add('w-id');
     trh.appendChild(th);
   });
   thead.appendChild(trh);
@@ -139,7 +139,7 @@ function renderRows(treeId, rows, machine, withSetNames) {
     header.forEach((k) => {
       const td = document.createElement('td');
       td.textContent = r[k] ?? '';
-      if (k === 'Sample_ID' || k === 'Sample_Name' || k === 'Description') td.className = 'left';
+      if (['Sample_ID', 'Sample_Name', 'Description', 'LibraryName'].includes(k)) td.className = 'left';
       if (SET_COLUMNS.includes(k)) td.className = withSetNames ? 'setcol on' : 'setcol off';
       tr.appendChild(td);
     });
@@ -189,17 +189,24 @@ async function undoSuffix(state, targets, targetSel) {
 
 // ══════════ MiSeq i100 タブ ══════════
 function applyDefaultsI100() {
-  $('a-module').value = DEFAULTS_I100.module;
-  $('a-workflow').value = DEFAULTS_I100.workflow;
-  $('a-prep').value = DEFAULTS_I100.libraryPrepKit;
-  $('a-indexkit').value = DEFAULTS_I100.indexKit;
-  $('a-desc').value = DEFAULTS_I100.description;
-  $('a-chem').value = DEFAULTS_I100.chemistry;
-  $('a-adapter').value = DEFAULTS_I100.adapter;
-  $('a-adv').value = DEFAULTS_I100.advancedSetting1;
-  $('a-read1').value = DEFAULTS_I100.reads[0];
-  $('a-read2').value = DEFAULTS_I100.reads[1];
-  $('a-project').value = DEFAULTS_I100.sampleProject;
+  $('a-runname').value = DEFAULTS_I100.runName;
+  $('a-ffv').value = DEFAULTS_I100.fileFormatVersion;
+  $('a-platform').value = DEFAULTS_I100.instrumentPlatform;
+  $('a-orientation').value = DEFAULTS_I100.indexOrientation;
+  $('a-analysis').value = DEFAULTS_I100.analysisLocation;
+  $('a-read1').value = DEFAULTS_I100.read1Cycles;
+  $('a-read2').value = DEFAULTS_I100.read2Cycles;
+  $('a-idx1cyc').value = DEFAULTS_I100.index1Cycles;
+  $('a-idx2cyc').value = DEFAULTS_I100.index2Cycles;
+  $('a-swver').value = DEFAULTS_I100.softwareVersion;
+  $('a-fastqfmt').value = DEFAULTS_I100.fastqCompressionFormat;
+  $('a-nolane').value = DEFAULTS_I100.noLaneSplitting;
+  $('a-fastqc').value = DEFAULTS_I100.generateFastqcMetrics;
+  $('a-override').value = DEFAULTS_I100.overrideCycles;
+  $('a-genver').value = DEFAULTS_I100.generatedVersion;
+  $('a-project').value = DEFAULTS_I100.projectName;
+  $('a-prepkit').value = DEFAULTS_I100.libraryPrepKitName;
+  $('a-adapterkit').value = DEFAULTS_I100.indexAdapterKitName;
 }
 $('a-reset').addEventListener('click', () => {
   applyDefaultsI100();
@@ -297,19 +304,7 @@ function refreshCount(prefix) {
 }
 $('a-ids').addEventListener('input', () => refreshCount('a'));
 
-$('a-names').addEventListener('input', () => { app.i100.namesTouched = true; });
-$('a-ids').addEventListener('input', () => {
-  if (!app.i100.namesTouched || $('a-names').value.trim() === '') setTextareaValue('a-names', $('a-ids').value);
-});
-$('a-copy-names').addEventListener('click', () => {
-  setTextareaValue('a-names', $('a-ids').value);
-  app.i100.namesTouched = false;
-  delete app.i100.baseline['a-names'];
-  setStatus('Sample_ID を Sample_Name に反映しました（この後 個別に修正できます）');
-});
-$('a-fill-desc').addEventListener('click', () => fillDescription('a-ids', 'a-descs'));
-
-const I100_TARGETS = { names: 'a-names', ids: 'a-ids', descs: 'a-descs' };
+const I100_TARGETS = { ids: 'a-ids' };
 $('a-suffix-apply').addEventListener('click', () =>
   applySuffix(app.i100, I100_TARGETS, 'a-suffix-target', 'a-suffix-from', 'a-suffix-to', 'a-suffix-text'));
 $('a-suffix-undo').addEventListener('click', () =>
@@ -323,32 +318,34 @@ $('a-with-set').addEventListener('change', () => {
 });
 
 $('a-build').addEventListener('click', async () => {
-  let params;
-  try {
-    params = {
-      date: normalizeDate($('a-date').value),
-      experimentName: $('a-exp').value.trim(),
-      module: $('a-module').value,
-      workflow: $('a-workflow').value,
-      libraryPrepKit: $('a-prep').value,
-      indexKit: $('a-indexkit').value,
-      description: $('a-desc').value,
-      chemistry: $('a-chem').value,
-      adapter: $('a-adapter').value,
-      advancedSetting1: $('a-adv').value,
-      reads: [$('a-read1').value.trim(), $('a-read2').value.trim()].filter((s) => s !== ''),
-    };
-  } catch (e) { await showMessage('入力エラー', e.message); return; }
+  const params = {
+    runName: $('a-runname').value.trim(),
+    fileFormatVersion: $('a-ffv').value.trim(),
+    instrumentPlatform: $('a-platform').value.trim(),
+    indexOrientation: $('a-orientation').value,
+    analysisLocation: $('a-analysis').value,
+    read1Cycles: $('a-read1').value.trim(),
+    read2Cycles: $('a-read2').value.trim(),
+    index1Cycles: $('a-idx1cyc').value.trim(),
+    index2Cycles: $('a-idx2cyc').value.trim(),
+    softwareVersion: $('a-swver').value.trim(),
+    overrideCycles: $('a-override').value.trim(),
+    fastqCompressionFormat: $('a-fastqfmt').value.trim(),
+    noLaneSplitting: $('a-nolane').value,
+    generateFastqcMetrics: $('a-fastqc').value,
+    generatedVersion: $('a-genver').value.trim(),
+  };
+  if (params.runName === '') { await showMessage('入力エラー', 'RunName を入力してください。'); return; }
 
   let result;
   try {
     result = buildRowsI100({
       sampleIds: $('a-ids').value,
-      sampleNames: $('a-names').value,
-      descriptions: $('a-descs').value,
+      projectName: $('a-project').value,
+      libraryPrepKitName: $('a-prepkit').value,
+      indexAdapterKitName: $('a-adapterkit').value,
       i7Ranges: readRanges('a-i7'),
       i5Ranges: readRanges('a-i5'),
-      sampleProject: $('a-project').value,
     });
   } catch (e) { await showMessage('入力エラー', e.message); return; }
 
@@ -356,15 +353,15 @@ $('a-build').addEventListener('click', async () => {
   app.i100.params = params;
   renderRows('a-tree', result.rows, 'i100', $('a-with-set').checked);
   renderWarnings('a-warn', result.warnings);
-  setStatus(`[MiSeq i100] シート作成完了: ${result.rows.length}件 | Date ${params.date} | ` +
+  setStatus(`[MiSeq i100] シート作成完了: ${result.rows.length}件 | RunName ${params.runName} | ` +
             `${result.rows[0].Index1_Set} 〜 ${result.rows[result.rows.length - 1].Index1_Set} | ` +
             `確認事項 ${result.warnings.length}件`);
 });
 
 $('a-clear').addEventListener('click', () => {
-  ['a-ids', 'a-names', 'a-descs'].forEach((id) => setTextareaValue(id, ''));
+  setTextareaValue('a-ids', '');
   resetRanges('a-i7'); resetRanges('a-i5');
-  app.i100 = { rows: [], params: null, namesTouched: false, baseline: {} };
+  app.i100 = { rows: [], params: null, baseline: {} };
   renderRows('a-tree', [], 'i100', $('a-with-set').checked);
   renderWarnings('a-warn', []); refreshCount('a');
   setStatus('クリアしました');
@@ -379,10 +376,10 @@ function ensureBuilt(state) {
 $('a-csv').addEventListener('click', async () => {
   if (!ensureBuilt(app.i100)) return;
   const withSet = $('a-with-set').checked;
-  const name = csvFileName(app.i100.params.date, 'i100');
+  const name = csvFileName(app.i100.params.runName, 'i100');
   downloadFile(name, buildCsvI100(app.i100.params, app.i100.rows, withSet), 'text/csv;charset=utf-8');
-  await showMessage('完了', `CSVを保存しました。\n${name}\n列数: ${dataHeader('i100', withSet).length}` +
-    `（set名列: ${withSet ? 'あり' : 'なし'}）`);
+  await showMessage('完了', `CSVを保存しました。\n${name}\n` +
+    `SampleSheet v2 形式・全行 5 列（set名列: ${withSet ? 'あり' : 'なし'}）`);
 });
 $('a-clip').addEventListener('click', async () => {
   if (!ensureBuilt(app.i100)) return;
@@ -397,17 +394,15 @@ $('a-preview').addEventListener('click', () => {
 
 $('a-demo').addEventListener('click', () => {
   const d = new Date();
-  $('a-date').value = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-  $('a-exp').value = 'eDNA-demo-run';
+  const p2 = (x) => String(x).padStart(2, '0');
+  $('a-runname').value = `Demo_Run_${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`;
+  $('a-project').value = 'Demo Project';
   resetRanges('a-i7', 'set1-1-1', 'set1-1-2');
   resetRanges('a-i5', 'set1-2-1', 'set1-2-2');
-  const ids = []; const descs = [];
-  for (let i = 1; i <= 8; i += 1) { ids.push(`Demo-Reef-${String(i).padStart(2, '0')}`); descs.push('Reef water (demo)'); }
-  for (let i = 1; i <= 8; i += 1) { ids.push(`Demo-Sand-${String(i).padStart(2, '0')}`); descs.push('Sediment (demo)'); }
+  const ids = [];
+  for (let i = 1; i <= 8; i += 1) ids.push(`Demo-Reef-${p2(i)}_jgCO1`);
+  for (let i = 1; i <= 8; i += 1) ids.push(`Demo-Sand-${p2(i)}_jgCO1`);
   setTextareaValue('a-ids', ids.join('\n'));
-  setTextareaValue('a-names', ids.join('\n'));
-  setTextareaValue('a-descs', descs.join('\n'));
-  app.i100.namesTouched = false;
   app.i100.baseline = {};
   refreshCount('a');
   setStatus('テストデータ（仮想サンプル16件）を入力しました。「シート作成」を押してください');
@@ -554,8 +549,8 @@ function renderRefTable() {
 document.title = APP_TITLE;
 applyDefaultsI100();
 applyDefaultsMiSeq();
-[['a-ids', 'a-ids-gutter'], ['a-names', 'a-names-gutter'], ['a-descs', 'a-descs-gutter'],
-  ['b-ids', 'b-ids-gutter'], ['b-descs', 'b-descs-gutter']].forEach(([t, g]) => attachGutter(t, g));
+[['a-ids', 'a-ids-gutter'], ['b-ids', 'b-ids-gutter'], ['b-descs', 'b-descs-gutter']]
+  .forEach(([t, g]) => attachGutter(t, g));
 ['a-i7', 'a-i5', 'b-i7', 'b-i5'].forEach((k) => resetRanges(k));
 renderRows('a-tree', [], 'i100', false);
 renderRows('b-tree', [], 'miseq', false);

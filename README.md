@@ -10,13 +10,49 @@
 
 | | MiSeq i100 | MiSeq |
 |---|---|---|
+| フォーマット | **SampleSheet v2**（FileFormatVersion 2） | 従来形式 |
+| セクション | `[Header]` `[Reads]` `[BCLConvert_Settings]` `[BCLConvert_Data]` `[Cloud_Settings]` `[Cloud_Data]` | `[Header]` `[Reads]` `[Settings]` `[Data]` |
+| CSV 列数 | 全行 5 列（set名の有無によらず固定） | 6 列（set名ありで 8 列） |
+| データ列 | `Sample_ID, Index, Index2` / `Sample_ID, ProjectName, LibraryName, LibraryPrepKitName, IndexAdapterKitName` | `Sample_ID, Description, I7_Index_ID, index, I5_Index_ID, index2` |
 | Index | UDI index（set 指定） | UDI index（set 指定） |
-| [Data] 列数 | 8列（set名ありで10列） | 6列（set名ありで8列） |
-| [Data] 列構成 | Sample_ID, Sample_Name, Description, I7_Index_ID, index, I5_Index_ID, index2, Sample_Project | Sample_ID, Description, I7_Index_ID, index, I5_Index_ID, index2 |
-| Index Kit 行 | あり | なし |
-| Module 既定値 | `GenerateFASTQ - 3.1.0` | `GenerateFASTQ - 2.0.0` |
 
-Workflow・Chemistry・adapter・AdvancedSetting1・[Reads] の既定値は両機種で共通です。
+### MiSeq i100（SampleSheet v2）の既定値
+
+| 項目 | 既定値 |
+|---|---|
+| FileFormatVersion | `2` |
+| RunName | `Test Run`（必須・変更して使用） |
+| InstrumentPlatform | `MiSeqi100Series` |
+| IndexOrientation | `Forward` |
+| AnalysisLocation | `Local` |
+| Read1Cycles / Read2Cycles | `501` / `501` |
+| Index1Cycles / Index2Cycles | `8` / `8` |
+| SoftwareVersion | `4.4.6` |
+| OverrideCycles | 空欄（サイクル数から自動生成） |
+| FastqCompressionFormat | `gzip` |
+| NoLaneSplitting | `TRUE` |
+| GenerateFastqcMetrics | `TRUE` |
+| GeneratedVersion | `1.26.0.202606102337` |
+| ProjectName | `Test Project` |
+
+`OverrideCycles` を空欄にすると `R1:Y{Read1};I1:I{Index1};I2:I{Index2};R2:Y{Read2}` を自動生成します
+（既定値なら `R1:Y501;I1:I8;I2:I8;R2:Y501`）。明示的に入力した場合はその値が優先されます。
+
+`[Cloud_Data]` の **LibraryName** は `Sample_ID_Index_Index2` の形式で自動生成されます
+（例: `JUN2024-1-0_0_jgCO1_TTACCGAC_CGAATACG`）。
+
+### MiSeq（従来機）の既定値
+
+| 項目 | 既定値 |
+|---|---|
+| Module | `GenerateFASTQ - 2.0.0` |
+| Workflow | `GenerateFASTQ` |
+| Chemistry | `Amplicon` |
+| adapter | `CTGTCTCTTATACACATCT` |
+| AdvancedSetting1 | `123` |
+| [Reads] | `301` / `301` |
+
+日付は `YYYY/M/D` 形式で出力します。`2026-08-18` と入力しても `2026/8/18` に正規化されます。
 
 ## Index の指定方法（set 記法）
 
@@ -65,38 +101,28 @@ i7 は S762:TTACCGAC 〜 S733:CCACAACA、i5 は S512:CGAATACG 〜 S561:GTACCACA 
 
 CSV に含めるかどうかは **「CSVにset名列を出力する」チェックボックス**で切り替えます。
 
-- **OFF（既定）**: 装置が読む標準の列構成のまま出力（i100 = 8列 / MiSeq = 6列）
-- **ON**: `index` の直後に `Index1_Set`、`index2` の直後に `Index2_Set` を挿入（i100 = 10列 / MiSeq = 8列）
+- **OFF（既定）**: 装置が読む標準の列構成のまま出力
+- **ON**: Index の直後に `Index1_Set`、Index2 の直後に `Index2_Set` を挿入
+
+i100 は v2 形式の仕様上すべての行が 5 列に揃うため、set名列を追加しても列数は変わりません
+（`Sample_ID,Index,Index2,,` → `Sample_ID,Index,Index1_Set,Index2,Index2_Set`）。
+MiSeq は 6 列 → 8 列に増えます。
 
 結果表の set名列は、出力対象のときは緑、対象外のときはグレーで表示されます。
 
 ## 入力項目
 
-### [Header] / [Settings]（両タブ共通）
+### MiSeq i100
 
-| 項目 | 既定値 |
-|---|---|
-| シーケンス日付 | （未入力・i100 は必須） |
-| Experiment Name | 空白 |
-| Workflow | `GenerateFASTQ` |
-| Library Prep Kit | 空白 |
-| Index Kit（i100 のみ） | 空白 |
-| Description | 空白 |
-| Chemistry | `Amplicon` |
-| adapter | `CTGTCTCTTATACACATCT` |
-| AdvancedSetting1 | `123` |
-| [Reads] | `301` / `301` |
+Sample_ID のリストを貼り付け、Index1 / Index2 の set を指定するだけでシートが作成されます。
+`ProjectName` `LibraryPrepKitName` `IndexAdapterKitName` は `[Cloud_Data]` に出力されます。
 
-日付は `YYYY/M/D` 形式で出力します。`2026-08-18` と入力しても `2026/8/18` に正規化されます。
-
-### [Data]
+### MiSeq（従来機）
 
 | 項目 | 入力方法 |
 |---|---|
 | Sample_ID | リストを貼り付け（1行1件） |
-| Sample_Name（i100 のみ） | Sample_ID 入力時に自動で同じ値が入り、その後に個別修正が可能 |
 | Description | リストを貼り付け（1行1件）／全行への一括入力ボタンあり |
-| Sample_Project（i100 のみ） | 既定は空白 |
 
 各入力欄の左には **行番号** が表示され、スクロールに追従します。
 
@@ -115,7 +141,7 @@ CSV に含めるかどうかは **「CSVにset名列を出力する」チェッ�
 
 ## 出力
 
-- **CSV出力**: `SampleSheet_MiSeq-i100_YYYYMMDD.csv` / `SampleSheet_MiSeq_YYYYMMDD.csv`（CRLF 改行、BOM なし）
+- **CSV出力**: i100 は `SampleSheet_<RunName>.csv`、MiSeq は `SampleSheet_MiSeq_YYYYMMDD.csv`（CRLF 改行、BOM なし）
 - **クリップボードにコピー**: CSV 全文をコピー
 - **CSVプレビュー**: 保存前に生成内容を確認
 
@@ -143,7 +169,7 @@ CSV に含めるかどうかは **「CSVにset名列を出力する」チェッ�
 │   ├── sheet.js            # set展開・行構築・CSV生成のロジックコア
 │   └── app.js              # UI レイヤー
 ├── tests/
-│   └── sheet.test.mjs      # ロジック検証（30件）
+│   └── sheet.test.mjs      # ロジック検証（31件）
 ├── .github/workflows/test.yml
 ├── vercel.json
 ├── package.json
@@ -184,7 +210,7 @@ git push -u origin main
 3. Framework Preset は **Other**（`vercel.json` によりビルドは実行されません）
 4. Root Directory はリポジトリ直下のまま → **Deploy**
 
-## 検証済み項目（`npm test` / 全30件）
+## 検証済み項目（`npm test` / 全31件）
 
 - UDI データの構造（4セット × 2側 × 12グループ × 8件 = 768 index）
 - 開始/終了を別指定した set 範囲の展開結果が仕様の例と一致
@@ -192,7 +218,9 @@ git push -u origin main
 - 複数の範囲ブロックの連結順序、空欄のスキップ、範囲間の index 重複検出
 - 複数セットにまたがるシート作成（97件目が set2-1-1-1 / P7126 になること）
 - set名列の有無による列構成の切り替え（i100: 8列⇔10列、MiSeq: 6列⇔8列）
-- MiSeq i100 / MiSeq の CSV 構造が既存シートと一致（区切り行のカンマ数も含む）
+- MiSeq i100 の v2 構造が添付ランシートと完全一致（セクション順・全行5列・LibraryName の生成規則）
+- OverrideCycles の自動生成と、[Header]/[Reads] の値の上書き
+- MiSeq の CSV 構造が既存シートと一致（区切り行のカンマ数も含む）
 - 接尾辞付与の対象行・件数と異常系、複数回適用してもベースラインが不変であること
 - 日付の正規化と異常系、Sample_Name の自動反映と個別修正の優先
 

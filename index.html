@@ -26,27 +26,46 @@
     <section class="nb-page" id="page-i100">
 
       <fieldset class="lf">
-        <legend>[Header] / [Settings]</legend>
+        <legend>[Header] / [Reads]</legend>
         <div class="param-grid">
-          <label>シーケンス日付:<input type="text" id="a-date" size="12" placeholder="2026/8/18"></label>
-          <label>Experiment Name:<input type="text" id="a-exp" size="18"></label>
-          <label>Module:<input type="text" id="a-module" size="22"></label>
-          <label>Workflow:<input type="text" id="a-workflow" size="16"></label>
+          <label>RunName:<input type="text" id="a-runname" size="18"></label>
+          <label>FileFormatVersion:<input type="text" id="a-ffv" size="4"></label>
+          <label>InstrumentPlatform:<input type="text" id="a-platform" size="18"></label>
+          <label>IndexOrientation:<select id="a-orientation">
+            <option value="Forward">Forward</option>
+            <option value="Reverse">Reverse</option>
+          </select></label>
+          <label>AnalysisLocation:<select id="a-analysis">
+            <option value="Local">Local</option>
+            <option value="Cloud">Cloud</option>
+          </select></label>
         </div>
         <div class="param-grid">
-          <label>Library Prep Kit:<input type="text" id="a-prep" size="16"></label>
-          <label>Index Kit:<input type="text" id="a-indexkit" size="16"></label>
-          <label>Description:<input type="text" id="a-desc" size="18"></label>
-          <label>Chemistry:<input type="text" id="a-chem" size="12"></label>
-        </div>
-        <div class="param-grid">
-          <label>adapter:<input type="text" id="a-adapter" size="24"></label>
-          <label>AdvancedSetting1:<input type="text" id="a-adv" size="8"></label>
-          <label>[Reads]:<input type="text" id="a-read1" size="6"></label>
-          <label>／<input type="text" id="a-read2" size="6"></label>
+          <label>Read1Cycles:<input type="text" id="a-read1" size="5"></label>
+          <label>Read2Cycles:<input type="text" id="a-read2" size="5"></label>
+          <label>Index1Cycles:<input type="text" id="a-idx1cyc" size="4"></label>
+          <label>Index2Cycles:<input type="text" id="a-idx2cyc" size="4"></label>
           <button type="button" id="a-reset" class="ghost">既定値に戻す</button>
         </div>
-        <p class="hint">日付は YYYY/M/D 形式（2026-08-18 のような入力も自動変換します）。</p>
+      </fieldset>
+
+      <fieldset class="lf">
+        <legend>[BCLConvert_Settings] / [Cloud_Settings]</legend>
+        <div class="param-grid">
+          <label>SoftwareVersion:<input type="text" id="a-swver" size="8"></label>
+          <label>FastqCompressionFormat:<input type="text" id="a-fastqfmt" size="8"></label>
+          <label>NoLaneSplitting:<select id="a-nolane">
+            <option value="TRUE">TRUE</option><option value="FALSE">FALSE</option>
+          </select></label>
+          <label>GenerateFastqcMetrics:<select id="a-fastqc">
+            <option value="TRUE">TRUE</option><option value="FALSE">FALSE</option>
+          </select></label>
+        </div>
+        <div class="param-grid">
+          <label>OverrideCycles:<input type="text" id="a-override" size="34" placeholder="空欄ならサイクル数から自動生成"></label>
+          <label>GeneratedVersion:<input type="text" id="a-genver" size="22"></label>
+        </div>
+        <p class="hint">OverrideCycles を空欄にすると <code>R1:Y{Read1};I1:I{Index1};I2:I{Index2};R2:Y{Read2}</code> を自動生成します。</p>
       </fieldset>
 
       <fieldset class="lf">
@@ -75,35 +94,26 @@
       </fieldset>
 
       <fieldset class="lf">
-        <legend>[Data]（リストを貼り付け）</legend>
-        <div class="text-cols three">
+        <legend>[BCLConvert_Data] / [Cloud_Data]</legend>
+        <div class="text-cols one">
           <div class="ta-field">
             <span class="ta-title">Sample_ID（1行1件）</span>
             <div class="ta-wrap"><div class="ta-gutter" id="a-ids-gutter"></div><textarea id="a-ids" rows="12" spellcheck="false" wrap="off"></textarea></div>
           </div>
-          <div class="ta-field">
-            <span class="ta-title">Sample_Name（空欄なら Sample_ID を反映）</span>
-            <div class="ta-wrap"><div class="ta-gutter" id="a-names-gutter"></div><textarea id="a-names" rows="12" spellcheck="false" wrap="off"></textarea></div>
-          </div>
-          <div class="ta-field">
-            <span class="ta-title">Description（1行1件）</span>
-            <div class="ta-wrap"><div class="ta-gutter" id="a-descs-gutter"></div><textarea id="a-descs" rows="12" spellcheck="false" wrap="off"></textarea></div>
-          </div>
         </div>
         <div class="param-grid">
-          <label>Sample_Project:<input type="text" id="a-project" size="20"></label>
-          <button type="button" id="a-copy-names" class="ghost">Sample_ID を Sample_Name に反映</button>
-          <button type="button" id="a-fill-desc" class="ghost">Description を全行に一括入力</button>
+          <label>ProjectName:<input type="text" id="a-project" size="18"></label>
+          <label>LibraryPrepKitName:<input type="text" id="a-prepkit" size="16"></label>
+          <label>IndexAdapterKitName:<input type="text" id="a-adapterkit" size="16"></label>
         </div>
+        <p class="hint">LibraryName は <code>Sample_ID_Index_Index2</code> の形式で自動生成されます。</p>
       </fieldset>
 
       <fieldset class="lf suffix-box">
         <legend>サンプル名の末尾に文字列を追加</legend>
         <div class="param-grid">
           <label>対象:<select id="a-suffix-target">
-            <option value="names">Sample_Name</option>
             <option value="ids">Sample_ID</option>
-            <option value="descs">Description</option>
           </select></label>
           <label>行:<input type="number" id="a-suffix-from" min="1" value="1"></label>
           <label>〜<input type="number" id="a-suffix-to" min="1" value="8"></label>

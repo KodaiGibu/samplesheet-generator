@@ -9,13 +9,12 @@ import {
   setOrdinal, ordinalToSet, toRanges, TOTAL_GROUPS,
   buildRowsI100, buildRowsMiSeq, buildCsvI100, buildCsvMiSeq,
   csvFileName, splitRows, appendSuffix, dataHeader, tableHeader,
-  DATA_HEADER_I100, DATA_HEADER_MISEQ,
+  makeOverrideCycles, BCL_HEADER, CLOUD_HEADER, DATA_HEADER_MISEQ, I100_COLUMNS,
 } from '../src/sheet.js';
 import { UDI_INDEX } from '../src/udi-data.js';
 
 const I100_ARGS = {
-  sampleNames: '', descriptions: '',
-  i7Start: 'set1-1-1', i7End: '', i5Start: 'set1-2-1', i5End: '', sampleProject: '',
+  i7Start: 'set1-1-1', i7End: '', i5Start: 'set1-2-1', i5End: '',
 };
 
 // ══ UDI データ ══
@@ -128,16 +127,16 @@ test('toRanges: 単一範囲と配列の両方を受け付ける', () => {
 test('i100: 複数セットにまたがるシート作成', () => {
   const ids = Array.from({ length: 120 }, (_, i) => `S${i + 1}`).join('\n');
   const { rows } = buildRowsI100({
-    sampleIds: ids, sampleNames: '', descriptions: '', sampleProject: '',
+    sampleIds: ids,
     i7Ranges: [{ start: 'set1-1-1', end: 'set2-1-3' }],
     i5Ranges: [{ start: 'set1-2-1', end: 'set2-2-3' }],
   });
   assert.equal(rows.length, 120);
   assert.equal(rows[0].Index1_Set, 'set1-1-1-1');
-  assert.deepEqual([rows[95].I7_Index_ID, rows[95].index], ['S733', 'CCACAACA']);
+  assert.deepEqual([rows[95].I7_Index_ID, rows[95].Index], ['S733', 'CCACAACA']);
   assert.equal(rows[96].Index1_Set, 'set2-1-1-1');
-  assert.deepEqual([rows[96].I7_Index_ID, rows[96].index], ['P7126', 'CACTGTAG']);
-  assert.deepEqual([rows[96].I5_Index_ID, rows[96].index2], ['P5134', 'AAGCGACT']);
+  assert.deepEqual([rows[96].I7_Index_ID, rows[96].Index], ['P7126', 'CACTGTAG']);
+  assert.deepEqual([rows[96].I5_Index_ID, rows[96].Index2], ['P5134', 'AAGCGACT']);
 });
 
 test('MiSeq: 複数の範囲ブロックを使ったシート作成', () => {
@@ -164,17 +163,25 @@ test('groupIndexes は set名ラベル付きで8件返す', () => {
 
 // ══ 列定義 ══
 test('dataHeader: set名列の有無を切り替えられる', () => {
-  assert.deepEqual(dataHeader('i100', false), DATA_HEADER_I100);
+  assert.deepEqual(dataHeader('i100', false), BCL_HEADER);
   assert.deepEqual(dataHeader('miseq', false), DATA_HEADER_MISEQ);
-  assert.deepEqual(dataHeader('i100', true), [
-    'Sample_ID', 'Sample_Name', 'Description',
-    'I7_Index_ID', 'index', 'Index1_Set', 'I5_Index_ID', 'index2', 'Index2_Set', 'Sample_Project',
-  ]);
+  assert.deepEqual(dataHeader('i100', true),
+    ['Sample_ID', 'Index', 'Index1_Set', 'Index2', 'Index2_Set']);
   assert.deepEqual(dataHeader('miseq', true), [
     'Sample_ID', 'Description',
     'I7_Index_ID', 'index', 'Index1_Set', 'I5_Index_ID', 'index2', 'Index2_Set',
   ]);
-  assert.deepEqual(tableHeader('i100'), dataHeader('i100', true));
+  assert.deepEqual(tableHeader('i100'),
+    ['Sample_ID', 'Index', 'Index1_Set', 'Index2', 'Index2_Set', 'LibraryName']);
+});
+
+test('OverrideCycles の自動生成', () => {
+  assert.equal(makeOverrideCycles({
+    read1Cycles: '501', read2Cycles: '501', index1Cycles: '8', index2Cycles: '8',
+  }), 'R1:Y501;I1:I8;I2:I8;R2:Y501');
+  assert.equal(makeOverrideCycles({
+    read1Cycles: '301', read2Cycles: '301', index1Cycles: '8', index2Cycles: '8',
+  }), 'R1:Y301;I1:I8;I2:I8;R2:Y301');
 });
 
 // ══ 日付 ══
@@ -213,59 +220,83 @@ test('接尾辞付与: 異常系', () => {
 });
 
 // ══ MiSeq i100 ══
-test('i100: Sample_Name は未入力なら Sample_ID を反映、個別修正は優先', () => {
-  const { rows } = buildRowsI100({ ...I100_ARGS, sampleIds: 'A\nB\nC', sampleNames: 'A\nB_mod\n' });
-  assert.equal(rows[0].Sample_Name, 'A');
-  assert.equal(rows[1].Sample_Name, 'B_mod');
-  assert.equal(rows[2].Sample_Name, 'C');
-});
-
-test('i100: index 割当と set名が付与される', () => {
-  const { rows } = buildRowsI100({ ...I100_ARGS, sampleIds: 'S1\nS2', descriptions: 'w1\nw2' });
-  assert.deepEqual([rows[0].I7_Index_ID, rows[0].index], ['S762', 'TTACCGAC']);
-  assert.deepEqual([rows[0].I5_Index_ID, rows[0].index2], ['S512', 'CGAATACG']);
+test('i100: index 割当・set名・LibraryName が付与される', () => {
+  const { rows } = buildRowsI100({ ...I100_ARGS, sampleIds: 'S1\nS2' });
+  assert.equal(rows[0].Index, 'TTACCGAC');
+  assert.equal(rows[0].Index2, 'CGAATACG');
   assert.equal(rows[0].Index1_Set, 'set1-1-1-1');
   assert.equal(rows[0].Index2_Set, 'set1-2-1-1');
+  assert.equal(rows[0].LibraryName, 'S1_TTACCGAC_CGAATACG');
+  assert.equal(rows[0].ProjectName, 'Test Project');
   assert.equal(rows[1].Index1_Set, 'set1-1-1-2');
 });
 
-test('i100: 行数不一致・index不足はエラー、余剰は警告', () => {
-  assert.throws(() => buildRowsI100({ ...I100_ARGS, sampleIds: 'S1\nS2', descriptions: 'only one' }),
-    /行数が不一致/);
+test('i100: index不足はエラー、余剰は警告', () => {
   const many = Array.from({ length: 9 }, (_, i) => `S${i + 1}`).join('\n');
   assert.throws(() => buildRowsI100({ ...I100_ARGS, sampleIds: many }), /Index1 \(i7\) が不足/);
   const { warnings } = buildRowsI100({ ...I100_ARGS, sampleIds: 'S1' });
   assert.ok(warnings.some((w) => /Index1 は 7件 余って/.test(w)));
 });
 
-test('i100: CSV 構造が添付シートと一致する（set名なし）', () => {
-  const { rows } = buildRowsI100({
-    ...I100_ARGS,
-    sampleIds: 'JUN2024-1-0_0_jgCO1\nJUN2024-1-1_50-1_jgCO1',
-    descriptions: 'Okinawa coast water\nOkinawa coast water',
-  });
-  const lines = buildCsvI100({ date: '2026/8/18' }, rows, false).split('\r\n');
-  assert.equal(lines[0], '[Header],,,,,,,');
-  assert.equal(lines[2], 'Date,2026/8/18,,,,,,');
-  assert.equal(lines[3], 'Module,GenerateFASTQ - 3.1.0,,,,,,');
-  assert.equal(lines[4], 'Workflow,GenerateFASTQ,,,,,,');
-  assert.equal(lines[6], 'Index Kit,,,,,,,');
-  assert.equal(lines[8], 'Chemistry,Amplicon,,,,,,');
-  assert.equal(lines[13], 'adapter,CTGTCTCTTATACACATCT,,,,,,');
-  assert.equal(lines[14], 'AdvancedSetting1,123,,,,,,');
-  assert.equal(lines[15], '[Data],,,,,,,');
-  assert.equal(lines[16], DATA_HEADER_I100.join(','));
-  assert.equal(lines[17],
-    'JUN2024-1-0_0_jgCO1,JUN2024-1-0_0_jgCO1,Okinawa coast water,S762,TTACCGAC,S512,CGAATACG,');
+test('i100: 添付ランシートと同じ v2 構造で出力される', () => {
+  const ids = ['JUN2024-1-0_0_jgCO1', 'JUN2024-1-1_50-1_jgCO1', 'JUN2024-1-1_50-2_jgCO1'].join('\n');
+  const { rows } = buildRowsI100({ ...I100_ARGS, sampleIds: ids });
+  const csv = buildCsvI100({}, rows, false);
+  const lines = csv.trim().split('\r\n');
+  // 全行が 5 列
+  assert.ok(lines.every((l) => l.split(',').length === I100_COLUMNS));
+  assert.equal(lines[0], '[Header],,,,');
+  assert.equal(lines[1], 'FileFormatVersion,2,,,');
+  assert.equal(lines[2], 'RunName,Test Run,,,');
+  assert.equal(lines[3], 'InstrumentPlatform,MiSeqi100Series,,,');
+  assert.equal(lines[4], 'IndexOrientation,Forward,,,');
+  assert.equal(lines[5], 'AnalysisLocation,Local,,,');
+  assert.equal(lines[6], ',,,,');
+  assert.equal(lines[7], '[Reads],,,,');
+  assert.equal(lines[8], 'Read1Cycles,501,,,');
+  assert.equal(lines[9], 'Read2Cycles,501,,,');
+  assert.equal(lines[10], 'Index1Cycles,8,,,');
+  assert.equal(lines[11], 'Index2Cycles,8,,,');
+  assert.equal(lines[13], '[BCLConvert_Settings],,,,');
+  assert.equal(lines[14], 'SoftwareVersion,4.4.6,,,');
+  assert.equal(lines[15], 'OverrideCycles,R1:Y501;I1:I8;I2:I8;R2:Y501,,,');
+  assert.equal(lines[16], 'FastqCompressionFormat,gzip,,,');
+  assert.equal(lines[17], 'NoLaneSplitting,TRUE,,,');
+  assert.equal(lines[18], 'GenerateFastqcMetrics,TRUE,,,');
+  assert.equal(lines[20], '[BCLConvert_Data],,,,');
+  assert.equal(lines[21], 'Sample_ID,Index,Index2,,');
+  assert.equal(lines[22], 'JUN2024-1-0_0_jgCO1,TTACCGAC,CGAATACG,,');
+  assert.equal(lines[23], 'JUN2024-1-1_50-1_jgCO1,TCGTCTGA,GTCCTTGA,,');
+  assert.equal(lines[24], 'JUN2024-1-1_50-2_jgCO1,TTCCAGGT,CAGTGCTT,,');
+  assert.equal(lines[26], '[Cloud_Settings],,,,');
+  assert.equal(lines[27], 'GeneratedVersion,1.26.0.202606102337,,,');
+  assert.equal(lines[29], '[Cloud_Data],,,,');
+  assert.equal(lines[30], CLOUD_HEADER.join(','));
+  assert.equal(lines[31],
+    'JUN2024-1-0_0_jgCO1,Test Project,JUN2024-1-0_0_jgCO1_TTACCGAC_CGAATACG,,');
+  assert.equal(lines[33],
+    'JUN2024-1-1_50-2_jgCO1,Test Project,JUN2024-1-1_50-2_jgCO1_TTCCAGGT_CAGTGCTT,,');
 });
 
-test('i100: set名ありの CSV（10列・区切り行も10列）', () => {
+test('i100: set名ありでも全行 5 列を維持する', () => {
   const { rows } = buildRowsI100({ ...I100_ARGS, sampleIds: 'S1' });
-  const lines = buildCsvI100({ date: '2026/8/18' }, rows, true).trim().split('\r\n');
-  assert.ok(lines.every((l) => l.split(',').length === 10));
-  assert.equal(lines[0], '[Header],,,,,,,,,');
-  assert.equal(lines[16], dataHeader('i100', true).join(','));
-  assert.equal(lines[17], 'S1,S1,,S762,TTACCGAC,set1-1-1-1,S512,CGAATACG,set1-2-1-1,');
+  const lines = buildCsvI100({}, rows, true).trim().split('\r\n');
+  assert.ok(lines.every((l) => l.split(',').length === I100_COLUMNS));
+  assert.equal(lines[21], 'Sample_ID,Index,Index1_Set,Index2,Index2_Set');
+  assert.equal(lines[22], 'S1,TTACCGAC,set1-1-1-1,CGAATACG,set1-2-1-1');
+});
+
+test('i100: [Header]/[Reads] の値を上書きできる', () => {
+  const { rows } = buildRowsI100({ ...I100_ARGS, sampleIds: 'S1', projectName: 'MyProj' });
+  const lines = buildCsvI100({
+    runName: 'Run_20260818', read1Cycles: '301', read2Cycles: '301',
+    softwareVersion: '4.5.0',
+  }, rows, false).trim().split('\r\n');
+  assert.equal(lines[2], 'RunName,Run_20260818,,,');
+  assert.equal(lines[8], 'Read1Cycles,301,,,');
+  assert.equal(lines[14], 'SoftwareVersion,4.5.0,,,');
+  assert.equal(lines[15], 'OverrideCycles,R1:Y301;I1:I8;I2:I8;R2:Y301,,,');
+  assert.ok(lines.some((l) => l.startsWith('S1,MyProj,S1_TTACCGAC_CGAATACG,')));
 });
 
 // ══ MiSeq（従来機・UDI set 指定）══
@@ -335,12 +366,14 @@ test('MiSeq: set名ありの CSV（8列）', () => {
 
 // ══ 共通 ══
 test('CSV: カンマを含む値はクォートされる', () => {
-  const { rows } = buildRowsI100({ ...I100_ARGS, sampleIds: 'S1', descriptions: 'water, surface' });
-  assert.ok(buildCsvI100({ date: '2026/8/18' }, rows, false).includes('"water, surface"'));
+  const { rows } = buildRowsI100({ ...I100_ARGS, sampleIds: 'S1', projectName: 'Proj, A' });
+  assert.ok(buildCsvI100({}, rows, false).includes('"Proj, A"'));
 });
 
 test('ファイル名とユーティリティ', () => {
-  assert.equal(csvFileName('2026/8/18', 'i100'), 'SampleSheet_MiSeq-i100_20260818.csv');
+  assert.equal(csvFileName('Test Run', 'i100'), 'SampleSheet_Test_Run.csv');
+  assert.equal(csvFileName('Run/2026', 'i100'), 'SampleSheet_Run_2026.csv');
+  assert.equal(csvFileName('', 'i100'), 'SampleSheet.csv');
   assert.equal(csvFileName('2026/8/18', 'miseq'), 'SampleSheet_MiSeq_20260818.csv');
   assert.deepEqual(splitRows('a\nb\n\n'), ['a', 'b']);
 });

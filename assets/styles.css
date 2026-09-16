@@ -83,6 +83,7 @@ button.mini.danger:hover{background:#f9d9d5}
 
 /* ── 行番号付きテキストエリア ── */
 .text-cols{display:grid;gap:8px}
+.text-cols.one{grid-template-columns:1fr}
 .text-cols.three{grid-template-columns:1fr 1fr 1fr}
 .text-cols.two{grid-template-columns:1fr 1fr}
 .ta-field{display:flex;flex-direction:column;gap:4px;width:100%}

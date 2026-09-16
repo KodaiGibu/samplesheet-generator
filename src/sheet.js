@@ -2,32 +2,46 @@
  * SampleSheet 作成ツール — ロジックコア
  *
  * 対応機種（index は両機種とも UDI index の set 指定）:
- *   - MiSeq i100 : [Data] 8列（Sample_Name / Sample_Project あり、Index Kit 行あり）
- *   - MiSeq      : [Data] 6列（Sample_Name / Sample_Project なし、Index Kit 行なし）
+ *   - MiSeq i100 : SampleSheet v2 形式（FileFormatVersion 2 / 5列 /
+ *                  [Header][Reads][BCLConvert_Settings][BCLConvert_Data]
+ *                  [Cloud_Settings][Cloud_Data]）
+ *   - MiSeq      : 従来形式（[Data] 6列、Index Kit 行なし）
  *
  * 依存なしの ES Module。ブラウザ / Node の両方から import 可能。
  */
 import { UDI_INDEX, GROUP_SIZE, GROUP_COUNT, SET_NUMBERS } from './udi-data.js';
 
-export const APP_TITLE = 'SampleSheet作成ツール（GenerateFASTQ）';
+export const APP_TITLE = 'SampleSheet作成ツール';
 
 // ══ 既定値 ══
 
-/** MiSeq i100 用の既定値 */
+/**
+ * MiSeq i100（SampleSheet v2）用の既定値。
+ * OverrideCycles は Read/Index のサイクル数から自動生成できるが、
+ * 明示指定された場合はその値を優先する。
+ */
 export const DEFAULTS_I100 = {
-  module: 'GenerateFASTQ - 3.1.0',
-  workflow: 'GenerateFASTQ',
-  libraryPrepKit: '',
-  indexKit: '',
-  description: '',
-  chemistry: 'Amplicon',
-  adapter: 'CTGTCTCTTATACACATCT',
-  advancedSetting1: '123',
-  sampleProject: '',
-  reads: ['301', '301'],
+  fileFormatVersion: '2',
+  runName: 'Test Run',
+  instrumentPlatform: 'MiSeqi100Series',
+  indexOrientation: 'Forward',
+  analysisLocation: 'Local',
+  read1Cycles: '501',
+  read2Cycles: '501',
+  index1Cycles: '8',
+  index2Cycles: '8',
+  softwareVersion: '4.4.6',
+  overrideCycles: '',              // 空欄ならサイクル数から自動生成
+  fastqCompressionFormat: 'gzip',
+  noLaneSplitting: 'TRUE',
+  generateFastqcMetrics: 'TRUE',
+  generatedVersion: '1.26.0.202606102337',
+  projectName: 'Test Project',
+  libraryPrepKitName: '',
+  indexAdapterKitName: '',
 };
 
-/** MiSeq（従来機）用の既定値。i100 を基準に、Module のみ従来機の値とする */
+/** MiSeq（従来機）用の既定値 */
 export const DEFAULTS_MISEQ = {
   module: 'GenerateFASTQ - 2.0.0',
   workflow: 'GenerateFASTQ',
@@ -39,41 +53,50 @@ export const DEFAULTS_MISEQ = {
   reads: ['301', '301'],
 };
 
-// ══ [Data] の列定義 ══
+// ══ 列定義 ══
 
 /** set名列のキー（CSV に出力するかは任意） */
 export const SET_COLUMNS = ['Index1_Set', 'Index2_Set'];
 
-/** 標準の [Data] ヘッダ（set名列を含まない） */
-export const DATA_HEADER_I100 = [
-  'Sample_ID', 'Sample_Name', 'Description',
-  'I7_Index_ID', 'index', 'I5_Index_ID', 'index2', 'Sample_Project',
+/** MiSeq i100: CSV 全体の列数（v2 形式は 5 列で揃える） */
+export const I100_COLUMNS = 5;
+
+/** MiSeq i100: [BCLConvert_Data] のヘッダ */
+export const BCL_HEADER = ['Sample_ID', 'Index', 'Index2'];
+
+/** MiSeq i100: [Cloud_Data] のヘッダ */
+export const CLOUD_HEADER = [
+  'Sample_ID', 'ProjectName', 'LibraryName', 'LibraryPrepKitName', 'IndexAdapterKitName',
 ];
+
+/** MiSeq（従来機）: [Data] のヘッダ */
 export const DATA_HEADER_MISEQ = [
   'Sample_ID', 'Description', 'I7_Index_ID', 'index', 'I5_Index_ID', 'index2',
 ];
 
 /**
- * CSV 用の [Data] ヘッダを返す。
- * set名列は index / index2 の直後（= 各 Index の隣）に差し込む。
+ * CSV 用のデータ列ヘッダを返す。
+ * set名列は Index / index2 の直後に差し込む。
  * @param {'i100'|'miseq'} machine
  * @param {boolean} withSetNames set名列を含めるか
  */
 export function dataHeader(machine, withSetNames) {
-  const base = machine === 'miseq' ? DATA_HEADER_MISEQ : DATA_HEADER_I100;
+  const base = machine === 'miseq' ? DATA_HEADER_MISEQ : BCL_HEADER;
   if (!withSetNames) return [...base];
   const out = [];
   base.forEach((k) => {
     out.push(k);
-    if (k === 'index') out.push('Index1_Set');
-    if (k === 'index2') out.push('Index2_Set');
+    if (k === 'Index' || k === 'index') out.push('Index1_Set');
+    if (k === 'Index2' || k === 'index2') out.push('Index2_Set');
   });
   return out;
 }
 
-/** 画面の結果表で常に表示するヘッダ（set名列を必ず含む） */
+/** 画面の結果表で表示するヘッダ（set名列を必ず含む） */
 export function tableHeader(machine) {
-  return dataHeader(machine, true);
+  if (machine === 'miseq') return dataHeader('miseq', true);
+  // i100 は BCLConvert_Data + Cloud_Data の情報をまとめて表示する
+  return ['Sample_ID', 'Index', 'Index1_Set', 'Index2', 'Index2_Set', 'LibraryName'];
 }
 
 // ══ 日付 ══
@@ -263,38 +286,40 @@ export function appendSuffix(text, from, to, suffix) {
 // ══ サンプル表の組み立て ══
 
 /**
- * MiSeq i100 用の行を構築する。
+ * MiSeq i100（SampleSheet v2）用の行を構築する。
  * index は i7Ranges / i5Ranges（範囲ブロックの配列）または
  * i7Start / i7End（単一範囲）のいずれの形式でも受け付ける。
+ *
+ * LibraryName は Illumina の慣例に従い `Sample_ID_Index_Index2` で自動生成する。
  * @returns {{rows:Object[], warnings:string[]}}
  */
 export function buildRowsI100(opts) {
-  const { sampleIds, sampleNames, descriptions, sampleProject } = opts;
+  const { sampleIds } = opts;
   const ids = splitRows(sampleIds).filter((s) => s !== '');
   if (!ids.length) throw new Error('Sample_ID を入力してください。');
 
-  const names = splitRows(sampleNames);
-  const descs = splitRows(descriptions);
   const { i7, i5, warnings } = resolveIndexes(ids, opts);
-
-  if (descs.length && descs.length !== ids.length) {
-    throw new Error(`Sample_ID (${ids.length}行) と Description (${descs.length}行) の行数が不一致。`);
-  }
+  const projectName = opts.projectName ?? DEFAULTS_I100.projectName;
+  const libraryPrepKitName = opts.libraryPrepKitName ?? '';
+  const indexAdapterKitName = opts.indexAdapterKitName ?? '';
   checkDuplicateIds(ids, warnings);
 
   const rows = ids.map((id, i) => ({
     Sample_ID: id,
-    Sample_Name: names[i] !== undefined && names[i] !== '' ? names[i] : id,
-    Description: descs[i] ?? '',
-    I7_Index_ID: i7[i].id,
-    index: i7[i].seq,
+    Index: i7[i].seq,
     Index1_Set: i7[i].label,
-    I5_Index_ID: i5[i].id,
-    index2: i5[i].seq,
+    Index2: i5[i].seq,
     Index2_Set: i5[i].label,
-    Sample_Project: sampleProject ?? '',
+    // [Cloud_Data] 用
+    ProjectName: projectName,
+    LibraryName: `${id}_${i7[i].seq}_${i5[i].seq}`,
+    LibraryPrepKitName: libraryPrepKitName,
+    IndexAdapterKitName: indexAdapterKitName,
+    // 参考情報（画面表示・トレース用。CSV には出力しない）
+    I7_Index_ID: i7[i].id,
+    I5_Index_ID: i5[i].id,
   }));
-  checkDuplicateIndexPairs(rows, warnings);
+  checkDuplicateIndexPairsI100(rows, warnings);
   return { rows, warnings };
 }
 
@@ -370,6 +395,14 @@ function checkDuplicateIds(ids, warnings) {
     else seen.set(id, i);
   });
 }
+function checkDuplicateIndexPairsI100(rows, warnings) {
+  const combo = new Map();
+  rows.forEach((r, i) => {
+    const k = `${r.Index}/${r.Index2}`;
+    if (combo.has(k)) warnings.push(`index の組み合わせが重複: ${k}（行 ${combo.get(k) + 1} と ${i + 1}）`);
+    else combo.set(k, i);
+  });
+}
 function checkDuplicateIndexPairs(rows, warnings) {
   const combo = new Map();
   rows.forEach((r, i) => {
@@ -391,32 +424,53 @@ function padLine(cells, columns) {
   return a.join(',');
 }
 
+/** OverrideCycles をサイクル数から自動生成する */
+export function makeOverrideCycles(p) {
+  return `R1:Y${p.read1Cycles};I1:I${p.index1Cycles};I2:I${p.index2Cycles};R2:Y${p.read2Cycles}`;
+}
+
 /**
- * MiSeq i100 用 SampleSheet CSV。
- * @param {boolean} withSetNames set名列を出力に含めるか
+ * MiSeq i100 用 SampleSheet CSV（v2 形式・全行 5 列）。
+ * @param {boolean} withSetNames [BCLConvert_Data] に set名列を追加するか
  */
 export function buildCsvI100(params, rows, withSetNames = false) {
   const p = { ...DEFAULTS_I100, ...params };
-  const header = dataHeader('i100', withSetNames);
-  const n = header.length;
+  const n = I100_COLUMNS;
+  const blank = padLine([], n);
+  const bclHeader = dataHeader('i100', withSetNames);
+  const override = String(p.overrideCycles ?? '').trim() || makeOverrideCycles(p);
+
   const lines = [
     padLine(['[Header]'], n),
-    padLine(['Experiment Name', p.experimentName ?? ''], n),
-    padLine(['Date', p.date], n),
-    padLine(['Module', p.module], n),
-    padLine(['Workflow', p.workflow], n),
-    padLine(['Library Prep Kit', p.libraryPrepKit], n),
-    padLine(['Index Kit', p.indexKit], n),
-    padLine(['Description', p.description], n),
-    padLine(['Chemistry', p.chemistry], n),
+    padLine(['FileFormatVersion', p.fileFormatVersion], n),
+    padLine(['RunName', p.runName], n),
+    padLine(['InstrumentPlatform', p.instrumentPlatform], n),
+    padLine(['IndexOrientation', p.indexOrientation], n),
+    padLine(['AnalysisLocation', p.analysisLocation], n),
+    blank,
     padLine(['[Reads]'], n),
-    ...p.reads.map((r) => padLine([r], n)),
-    padLine(['[Settings]'], n),
-    padLine(['adapter', p.adapter], n),
-    padLine(['AdvancedSetting1', p.advancedSetting1], n),
-    padLine(['[Data]'], n),
-    header.map(esc).join(','),
-    ...rows.map((r) => header.map((k) => esc(r[k])).join(',')),
+    padLine(['Read1Cycles', p.read1Cycles], n),
+    padLine(['Read2Cycles', p.read2Cycles], n),
+    padLine(['Index1Cycles', p.index1Cycles], n),
+    padLine(['Index2Cycles', p.index2Cycles], n),
+    blank,
+    padLine(['[BCLConvert_Settings]'], n),
+    padLine(['SoftwareVersion', p.softwareVersion], n),
+    padLine(['OverrideCycles', override], n),
+    padLine(['FastqCompressionFormat', p.fastqCompressionFormat], n),
+    padLine(['NoLaneSplitting', p.noLaneSplitting], n),
+    padLine(['GenerateFastqcMetrics', p.generateFastqcMetrics], n),
+    blank,
+    padLine(['[BCLConvert_Data]'], n),
+    padLine(bclHeader, n),
+    ...rows.map((r) => padLine(bclHeader.map((k) => r[k]), n)),
+    blank,
+    padLine(['[Cloud_Settings]'], n),
+    padLine(['GeneratedVersion', p.generatedVersion], n),
+    blank,
+    padLine(['[Cloud_Data]'], n),
+    padLine(CLOUD_HEADER, n),
+    ...rows.map((r) => padLine(CLOUD_HEADER.map((k) => r[k]), n)),
   ];
   return lines.join('\r\n') + '\r\n';
 }
@@ -450,11 +504,18 @@ export function buildCsvMiSeq(params, rows, withSetNames = false) {
   return lines.join('\r\n') + '\r\n';
 }
 
-/** 保存ファイル名 */
-export function csvFileName(dateStr, machine) {
-  const tag = machine === 'miseq' ? 'MiSeq' : 'MiSeq-i100';
-  const m = String(dateStr).match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
-  if (!m) return `SampleSheet_${tag}.csv`;
-  const p2 = (x) => String(x).padStart(2, '0');
-  return `SampleSheet_${tag}_${m[1]}${p2(m[2])}${p2(m[3])}.csv`;
+/**
+ * 保存ファイル名。
+ *   i100  : RunName をもとに SampleSheet_<RunName>.csv
+ *   miseq : 日付をもとに SampleSheet_MiSeq_YYYYMMDD.csv
+ */
+export function csvFileName(key, machine) {
+  if (machine === 'miseq') {
+    const m = String(key ?? '').match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (!m) return 'SampleSheet_MiSeq.csv';
+    const p2 = (x) => String(x).padStart(2, '0');
+    return `SampleSheet_MiSeq_${m[1]}${p2(m[2])}${p2(m[3])}.csv`;
+  }
+  const safe = String(key ?? '').trim().replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+  return safe ? `SampleSheet_${safe}.csv` : 'SampleSheet.csv';
 }
