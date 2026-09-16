@@ -45,34 +45,6 @@ input[type=text]:focus,input[type=number]:focus,select:focus,textarea:focus{
 }
 input[type=number]{width:5.5em}
 input[type=checkbox]{accent-color:var(--brand)}
-.range-row input,.range-row .r-start,.range-row .r-end{font-family:ui-monospace,'Consolas',monospace;font-size:.92em}
-
-/* ── Index 範囲ブロック（複数セット対応）── */
-.range-block{padding:3px 0}
-.range-head{display:flex;align-items:center;gap:10px;padding:2px 0}
-.range-rows{display:flex;flex-direction:column;gap:4px;margin:2px 0 4px 0}
-.range-row{
-  display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;
-  padding:3px 8px;background:#fff;border:1px solid var(--line);border-radius:3px;
-}
-.range-row .r-no{
-  min-width:3.6em;font-size:.8em;font-weight:600;color:var(--brand-dark);
-}
-.range-row .r-info{font-size:.8em;color:#6b7a89;min-width:5em}
-.range-row .r-info.bad{color:#b3261e;font-weight:600}
-button.mini{
-  font-size:.8em;padding:2px 10px;border-radius:3px;
-  color:var(--brand-dark);background:var(--brand-pale);border-color:var(--brand-line);
-}
-button.mini:hover{background:#cdefe4}
-button.mini.danger{color:#8a2a22;background:#fdecea;border-color:#f0b5ae;font-weight:700;padding:2px 8px}
-button.mini.danger:hover{background:#f9d9d5}
-.range-row .r-del{margin-left:auto}
-.idx-label{
-  display:inline-block;min-width:92px;font-size:.9em;font-weight:600;color:var(--brand-dark);
-  background:var(--brand-pale);border:1px solid var(--brand-line);border-radius:3px;
-  padding:2px 10px;text-align:center;
-}
 .hint{margin:4px 0 0;font-size:.82em;color:#5b6b7b}
 .hint code{background:#fff;border:1px solid var(--line);border-radius:3px;padding:0 4px;font-size:.95em}
 .idx-count{
@@ -81,16 +53,35 @@ button.mini.danger:hover{background:#f9d9d5}
 }
 .idx-count.bad{color:#8a2a22;background:#fdecea;border-color:#f0b5ae}
 
+/* ── Index 範囲ブロック ── */
+.idx-label{
+  display:inline-block;min-width:92px;font-size:.9em;font-weight:600;color:var(--brand-dark);
+  background:var(--brand-pale);border:1px solid var(--brand-line);border-radius:3px;
+  padding:2px 10px;text-align:center;
+}
+.range-block{padding:3px 0}
+.range-head{display:flex;align-items:center;gap:10px;padding:2px 0;flex-wrap:wrap}
+.auto-chk{font-size:.85em;color:var(--brand-dark);font-weight:600}
+.range-rows{display:flex;flex-direction:column;gap:4px;margin:2px 0 4px 0}
+.range-row{
+  display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;
+  padding:3px 8px;background:#fff;border:1px solid var(--line);border-radius:3px;
+}
+.range-row input,.range-row .r-start,.range-row .r-end{font-family:ui-monospace,'Consolas',monospace;font-size:.92em}
+.range-row .r-no{min-width:3.6em;font-size:.8em;font-weight:600;color:var(--brand-dark)}
+.range-row .r-info{font-size:.8em;color:#6b7a89;min-width:5em}
+.range-row .r-info.bad{color:#b3261e;font-weight:600}
+.range-row .r-del{margin-left:auto}
+.range-row input[data-auto="1"]{background:var(--brand-pale)}
+
 /* ── 行番号付きテキストエリア ── */
 .text-cols{display:grid;gap:8px}
 .text-cols.one{grid-template-columns:1fr}
-.text-cols.three{grid-template-columns:1fr 1fr 1fr}
 .text-cols.two{grid-template-columns:1fr 1fr}
+.text-cols.three{grid-template-columns:1fr 1fr 1fr}
 .ta-field{display:flex;flex-direction:column;gap:4px;width:100%}
 .ta-title{font-size:.86em}
-.ta-wrap{
-  display:flex;border:1px solid var(--line);border-radius:3px;background:#fff;overflow:hidden;
-}
+.ta-wrap{display:flex;border:1px solid var(--line);border-radius:3px;background:#fff;overflow:hidden}
 .ta-gutter{
   flex:0 0 auto;min-width:3em;padding:6px 6px 6px 8px;margin:0;text-align:right;
   background:#f3f6f7;border-right:1px solid var(--line);color:#8a97a3;
@@ -105,7 +96,7 @@ button.mini.danger:hover{background:#f9d9d5}
 .ta-wrap textarea:focus{outline:none}
 .ta-wrap:focus-within{outline:2px solid var(--brand-line);outline-offset:-1px}
 
-/* ── ボタンバー ── */
+/* ── ボタン ── */
 .btnbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0}
 button{
   font:inherit;font-size:.92em;padding:5px 14px;border:1px solid var(--line);
@@ -114,8 +105,17 @@ button{
 button:hover{background:var(--brand-pale)}
 button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
 button.primary:hover{background:var(--brand-dark)}
+button.accent{background:var(--brand-pale);border-color:var(--brand-line);color:var(--brand-dark);font-weight:600}
+button.accent:hover{background:#cdefe4}
 button.ghost{background:transparent;border-style:dashed;color:var(--brand-dark)}
-.vsep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
+button.mini{
+  font-size:.8em;padding:2px 10px;border-radius:3px;
+  color:var(--brand-dark);background:var(--brand-pale);border-color:var(--brand-line);
+}
+button.mini:hover{background:#cdefe4}
+button.mini.danger{color:#8a2a22;background:#fdecea;border-color:#f0b5ae;font-weight:700;padding:2px 8px}
+button.mini.danger:hover{background:#f9d9d5}
+.vsep{width:1px;align-self:stretch;min-height:1.6em;background:var(--line);margin:0 4px}
 
 /* ── 結果テーブル ── */
 .tree-wrap{border:1px solid var(--line);border-radius:4px;overflow:auto;max-height:50vh;background:#fff}
@@ -131,8 +131,6 @@ table.tree td.mono{font-family:ui-monospace,'Consolas',monospace;letter-spacing:
 table.tree td.strong{font-weight:600;color:var(--brand-dark)}
 table.tree tbody tr:nth-child(even) td{background:#f9fafa}
 table.tree tbody tr:nth-child(even) td.num{background:#f0f3f4}
-
-/* set名列: CSV 出力対象なら強調、対象外なら淡色 */
 table.tree th.setcol.on{background:var(--brand-dark)}
 table.tree th.setcol.off{background:#8fa0ab}
 table.tree td.setcol{font-family:ui-monospace,'Consolas',monospace;font-size:.95em}

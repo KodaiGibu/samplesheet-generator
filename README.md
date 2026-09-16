@@ -1,149 +1,107 @@
-# SampleSheet作成ツール（GenerateFASTQ）
+# SampleSheet作成ツール
 
-**MiSeq i100** と **MiSeq** の GenerateFASTQ 用 SampleSheet CSV を作成する Web ツールです。
-機種ごとにタブを切り替えて使用します。index はどちらも UDI index の **set 指定**で割り当てます。
+**MiSeq i100 / NextSeq / MiSeq** のサンプルシート CSV を作成する Web ツールです。
+機種ごとにタブを切り替えて使用し、index はいずれも UDI index の **set 指定**で割り当てます。
 
 - ビルド不要の静的サイト（HTML + CSS + バニラ JavaScript、外部依存ゼロ）
 - 処理はすべてブラウザ内で完結し、サンプル情報はサーバーに送信されません
 
 ## 機種ごとの違い
 
-| | MiSeq i100 | MiSeq |
-|---|---|---|
-| フォーマット | **SampleSheet v2**（FileFormatVersion 2） | 従来形式 |
-| セクション | `[Header]` `[Reads]` `[BCLConvert_Settings]` `[BCLConvert_Data]` `[Cloud_Settings]` `[Cloud_Data]` | `[Header]` `[Reads]` `[Settings]` `[Data]` |
-| CSV 列数 | 全行 5 列（set名の有無によらず固定） | 6 列（set名ありで 8 列） |
-| データ列 | `Sample_ID, Index, Index2` / `Sample_ID, ProjectName, LibraryName, LibraryPrepKitName, IndexAdapterKitName` | `Sample_ID, Description, I7_Index_ID, index, I5_Index_ID, index2` |
-| Index | UDI index（set 指定） | UDI index（set 指定） |
+| | MiSeq i100 | NextSeq | MiSeq |
+|---|---|---|---|
+| フォーマット | SampleSheet v2 | 従来形式 | 従来形式 |
+| セクション | `[Header]` `[Reads]` `[BCLConvert_Settings]` `[BCLConvert_Data]` `[Cloud_Settings]` `[Cloud_Data]` | `[Header]` `[Reads]` `[Settings]` `[Data]` | `[Header]` `[Reads]` `[Settings]` `[Data]` |
+| CSV 列数 | 全行 5 列（固定） | 7 列（set名ありで 9 列） | 6 列（set名ありで 8 列） |
+| データ列 | `Sample_ID, Index, Index2` ほか | `Sample_ID, Sample_Name, Description, I7_Index_ID, index, I5_Index_ID, index2` | `Sample_ID, Description, I7_Index_ID, index, I5_Index_ID, index2` |
+| Index Kit 行 | — | あり | なし |
+| adapter 行 | — | なし | あり |
+| Module 既定値 | — | `GenerateFASTQ - 3.1.0` | `GenerateFASTQ - 2.0.0` |
+| [Reads] 既定値 | 501 / 501 | 151 / 151 | 301 / 301 |
 
-### MiSeq i100（SampleSheet v2）の既定値
+MiSeq i100 は `FileFormatVersion 2` / `InstrumentPlatform MiSeqi100Series` で出力し、
+`OverrideCycles` を空欄にすると `R1:Y{Read1};I1:I{Index1};I2:I{Index2};R2:Y{Read2}` を自動生成します。
+`[Cloud_Data]` の **LibraryName** は `Sample_ID_Index_Index2` の形式で自動生成されます。
 
-| 項目 | 既定値 |
-|---|---|
-| FileFormatVersion | `2` |
-| RunName | `Test Run`（必須・変更して使用） |
-| InstrumentPlatform | `MiSeqi100Series` |
-| IndexOrientation | `Forward` |
-| AnalysisLocation | `Local` |
-| Read1Cycles / Read2Cycles | `501` / `501` |
-| Index1Cycles / Index2Cycles | `8` / `8` |
-| SoftwareVersion | `4.4.6` |
-| OverrideCycles | 空欄（サイクル数から自動生成） |
-| FastqCompressionFormat | `gzip` |
-| NoLaneSplitting | `TRUE` |
-| GenerateFastqcMetrics | `TRUE` |
-| GeneratedVersion | `1.26.0.202606102337` |
-| ProjectName | `Test Project` |
-
-`OverrideCycles` を空欄にすると `R1:Y{Read1};I1:I{Index1};I2:I{Index2};R2:Y{Read2}` を自動生成します
-（既定値なら `R1:Y501;I1:I8;I2:I8;R2:Y501`）。明示的に入力した場合はその値が優先されます。
-
-`[Cloud_Data]` の **LibraryName** は `Sample_ID_Index_Index2` の形式で自動生成されます
-（例: `JUN2024-1-0_0_jgCO1_TTACCGAC_CGAATACG`）。
-
-### MiSeq（従来機）の既定値
-
-| 項目 | 既定値 |
-|---|---|
-| Module | `GenerateFASTQ - 2.0.0` |
-| Workflow | `GenerateFASTQ` |
-| Chemistry | `Amplicon` |
-| adapter | `CTGTCTCTTATACACATCT` |
-| AdvancedSetting1 | `123` |
-| [Reads] | `301` / `301` |
-
-日付は `YYYY/M/D` 形式で出力します。`2026-08-18` と入力しても `2026/8/18` に正規化されます。
+NextSeq は `[Settings]` に `AdvancedSetting1` のみを出力し（adapter 行なし）、
+`[Reads]` と `[Settings]` の後ろに空行が入る構成です。
 
 ## Index の指定方法（set 記法）
 
 **1つの set ラベル（例 `set1-1-3`）= 8連チューブ1本分 = 8 index** です。
-開始 set と終了 set を **別々の入力欄** に指定します。
+開始 set と終了 set を別々の入力欄に指定します。
 
 | 開始 set | 終了 set | 展開される index |
 |---|---|---|
 | `set1-1-1` | `set1-1-12` | 96 件 |
 | `set1-1-1` | `12` | 96 件（終了は番号だけでも可） |
 | `set1-1-1` | （空欄） | 8 件（開始グループのみ） |
-| `set1-1-10` | `set2-1-3` | 48 件（**セットをまたぐ指定**） |
+| `set1-1-10` | `set2-1-3` | 48 件（セットをまたぐ指定） |
 | `set1-1-1` | `set4-1-12` | 384 件（全4セット） |
 
 `setN-M-K` の各要素は **N**: セット番号（1〜4）、**M**: `1`=i7 / `2`=i5、**K**: グループ番号（1〜12）です。
 1セット = 12グループ × 8 index = 96 index、全4セットで 768 index を収録しています。
 
+### Index2 の自動入力
+
+**「Index2 を自動入力」**（既定 ON）を有効にしていると、Index1 に set を入力した時点で
+対応する Index2 の set が自動で入ります。側（M）だけを `1` → `2` に置き換えるため、
+セット番号とグループ番号はそのまま維持されます。
+
+| Index1 に入力 | Index2 に自動入力される値 |
+|---|---|
+| `set1-1-1` | `set1-2-1` |
+| `set1-1-12` | `set1-2-12` |
+| `set3-1-5` | `set3-2-5` |
+
+自動入力された欄は淡い緑で表示されます。**自動入力後に手で書き換えることも可能**で、
+一度手修正した欄は以後 Index1 を変更しても上書きされません（手修正した値が保持されます）。
+チェックを外せば自動入力そのものを無効化できます。
+
 ### 複数セットの指定
 
-1枚のサンプルシートで複数のセットを使う場合、次の2通りの方法があります。
+連続した範囲はセットをまたいで直接指定でき（`set1-1-12` の次は `set2-1-1`）、
+連続しないセットは「＋ 範囲を追加」で行を増やして併記できます。
+各範囲行には展開件数が表示され、範囲間で index が重複した場合はエラーになります。
 
-**1. 連続した範囲はセットをまたいで直接指定**
+## 384サンプルのテンプレート出力
 
-開始と終了のセット番号が異なる場合、`set1-1-12` の次を `set2-1-1` として連続的に展開します。
-例えば `set1-1-10` 〜 `set2-1-3` と指定すると、set1 の 10・11・12 と set2 の 1・2・3 の
-計6グループ（48 index）が順に割り当てられます。側（i7 どうし / i5 どうし）が一致していれば、
-`set1-1-1` 〜 `set4-1-12` のように全4セットを通した指定も可能です。
+各機種タブの **「384サンプルのテンプレート出力」** ボタンで、
+384サンプル分のデモデータを記載したサンプルシートをダウンロードできます。
 
-**2. 連続しないセットは範囲ブロックを追加**
+- Sample_ID: `Demo-A01`〜`Demo-A96`, `Demo-B01`〜…, `Demo-D96`（4プレート × 96）
+- Index1: `set1-1-1`〜`set4-1-12`（i7 384件）
+- Index2: `set1-2-1`〜`set4-2-12`（i5 384件）
+- ファイル名: `SampleSheet_Template_MiSeq-i100_384samples.csv` など
 
-「＋ 範囲を追加」ボタンで入力行を増やすと、離れたセットを組み合わせられます。
-例えば 範囲1 に `set1-1-1`〜`set1-1-2`、範囲2 に `set3-1-5` を指定すると、
-set1 の 16 index に続けて set3 の 8 index が割り当てられます（指定した順に連結）。
+「CSVにset名列を出力する」のチェック状態はテンプレートにも反映されます。
 
-各範囲行には展開される index 件数が表示され、範囲どうしで同じ index が重複した場合は
-エラーとして検出されます。不要な行は行末の「×」で削除できます。
+## index 一覧の CSV 出力
 
-**指定例**: Index1 に `set1-1-1`〜`set1-1-12`、Index2 に `set1-2-1`〜`set1-2-12` を指定すると、
-i7 は S762:TTACCGAC 〜 S733:CCACAACA、i5 は S512:CGAATACG 〜 S561:GTACCACA が
-先頭のサンプルから順に割り当てられます。
+「index 一覧」タブから、収録している UDI index を CSV で出力できます。
+
+| ボタン | 出力内容 |
+|---|---|
+| 表示中のセットをCSV出力 | 選択中のセット・側のみ 96 件（`Set_Name, Group, Well, Index_ID, Index_Sequence`） |
+| 全index（768件）をCSV出力 | 全4セット × i7/i5 の 768 件（`Set, Side, Side_Label, Group, Well, Set_Name, Index_ID, Index_Sequence`） |
 
 ## set名列の出力
 
 結果表には **Index1_Set / Index2_Set** の列が常に表示され、各サンプルがどの set の
 どのウェルの index を使っているかを `set1-1-3-5`（set-側-グループ-ウェル位置）の形式で確認できます。
-
-CSV に含めるかどうかは **「CSVにset名列を出力する」チェックボックス**で切り替えます。
-
-- **OFF（既定）**: 装置が読む標準の列構成のまま出力
-- **ON**: Index の直後に `Index1_Set`、Index2 の直後に `Index2_Set` を挿入
-
-i100 は v2 形式の仕様上すべての行が 5 列に揃うため、set名列を追加しても列数は変わりません
-（`Sample_ID,Index,Index2,,` → `Sample_ID,Index,Index1_Set,Index2,Index2_Set`）。
-MiSeq は 6 列 → 8 列に増えます。
-
-結果表の set名列は、出力対象のときは緑、対象外のときはグレーで表示されます。
-
-## 入力項目
-
-### MiSeq i100
-
-Sample_ID のリストを貼り付け、Index1 / Index2 の set を指定するだけでシートが作成されます。
-`ProjectName` `LibraryPrepKitName` `IndexAdapterKitName` は `[Cloud_Data]` に出力されます。
-
-### MiSeq（従来機）
-
-| 項目 | 入力方法 |
-|---|---|
-| Sample_ID | リストを貼り付け（1行1件） |
-| Description | リストを貼り付け（1行1件）／全行への一括入力ボタンあり |
-
-各入力欄の左には **行番号** が表示され、スクロールに追従します。
+CSV に含めるかどうかは「CSVにset名列を出力する」チェックボックスで切り替えます
+（出力対象のときは緑、対象外のときはグレーで表示）。
 
 ## サンプル名の末尾に文字列を追加
 
-行範囲を指定して、末尾に任意の文字列をまとめて追加できます。
+行範囲を指定して、末尾に任意の文字列をまとめて追加できます。入力欄の左には **行番号** が表示されます。
 
-- **対象**: Sample_Name / Sample_ID / Description（MiSeq タブは Sample_ID / Description）
-- **行**: 開始行 〜 終了行（入力欄の行番号を参照）
+- **対象**: 機種ごとに Sample_ID / Sample_Name / Description から選択
+- **行**: 開始行 〜 終了行（行番号を参照）
 - **追加する文字列**: 例 `_16S`
 
-例えば行 1〜8 に `_16S` を追加すると `Demo-Reef-01` → `Demo-Reef-01_16S` になります。
-
-**「付与前に戻す」** は、その列に対して **最初に追加を行う前の状態** へまとめて戻します。
-複数回追加していても一度の操作で元の状態に復元されます（1操作ずつの取り消しではありません）。
-
-## 出力
-
-- **CSV出力**: i100 は `SampleSheet_<RunName>.csv`、MiSeq は `SampleSheet_MiSeq_YYYYMMDD.csv`（CRLF 改行、BOM なし）
-- **クリップボードにコピー**: CSV 全文をコピー
-- **CSVプレビュー**: 保存前に生成内容を確認
+**「付与前に戻す」** は、その列に対して **最初に追加を行う前の状態** へまとめて戻します
+（複数回追加していても一度の操作で復元されます）。
 
 ## 検証機能
 
@@ -152,24 +110,22 @@ Sample_ID のリストを貼り付け、Index1 / Index2 の set を指定する�
 - Index の件数がサンプル数に足りているか（不足はエラー）
 - 複数の範囲ブロック間で index が重複していないか（重複はエラー）
 - Sample_ID と Description の行数一致（不一致はエラー）
-- Index の余剰（警告）
-- Sample_ID の重複（警告）
-- index / index2 の組み合わせ重複（警告）
+- Index の余剰、Sample_ID の重複、index の組み合わせ重複（警告）
 
 ## ディレクトリ構成
 
 ```
 .
-├── index.html              # UI（MiSeq i100 / MiSeq / index 一覧 の3タブ）
+├── index.html              # UI（MiSeq i100 / NextSeq / MiSeq / index 一覧 の4タブ）
 ├── assets/
 │   ├── styles.css
 │   └── favicon.svg
 ├── src/
 │   ├── udi-data.js         # UDI index データ（xlsx から生成・自動生成物）
-│   ├── sheet.js            # set展開・行構築・CSV生成のロジックコア
+│   ├── sheet.js            # set展開・行構築・CSV生成・テンプレートのロジックコア
 │   └── app.js              # UI レイヤー
 ├── tests/
-│   └── sheet.test.mjs      # ロジック検証（31件）
+│   └── sheet.test.mjs      # ロジック検証（25件）
 ├── .github/workflows/test.yml
 ├── vercel.json
 ├── package.json
@@ -199,7 +155,7 @@ npm test
 cd samplesheet-generator-web
 git init
 git add .
-git commit -m "feat: SampleSheet作成ツール（MiSeq i100 / MiSeq 対応）"
+git commit -m "feat: SampleSheet作成ツール（MiSeq i100 / NextSeq / MiSeq 対応）"
 git branch -M main
 git remote add origin https://github.com/<ユーザー名>/samplesheet-generator-web.git
 git push -u origin main
@@ -210,19 +166,16 @@ git push -u origin main
 3. Framework Preset は **Other**（`vercel.json` によりビルドは実行されません）
 4. Root Directory はリポジトリ直下のまま → **Deploy**
 
-## 検証済み項目（`npm test` / 全31件）
+## 検証済み項目（`npm test` / 全25件）
 
 - UDI データの構造（4セット × 2側 × 12グループ × 8件 = 768 index）
-- 開始/終了を別指定した set 範囲の展開結果が仕様の例と一致
-- セットをまたぐ範囲展開（set1-1-10 〜 set2-1-3 = 48件、set1-1-1 〜 set4-1-12 = 384件）
-- 複数の範囲ブロックの連結順序、空欄のスキップ、範囲間の index 重複検出
-- 複数セットにまたがるシート作成（97件目が set2-1-1-1 / P7126 になること）
-- set名列の有無による列構成の切り替え（i100: 8列⇔10列、MiSeq: 6列⇔8列）
-- MiSeq i100 の v2 構造が添付ランシートと完全一致（セクション順・全行5列・LibraryName の生成規則）
-- OverrideCycles の自動生成と、[Header]/[Reads] の値の上書き
-- MiSeq の CSV 構造が既存シートと一致（区切り行のカンマ数も含む）
-- 接尾辞付与の対象行・件数と異常系、複数回適用してもベースラインが不変であること
-- 日付の正規化と異常系、Sample_Name の自動反映と個別修正の優先
+- set 範囲の展開、セット跨ぎ、複数範囲の連結と重複検出
+- `pairedSetToken` による Index2 の自動対応（`set1-1-1` → `set1-2-1` など）
+- MiSeq i100 の v2 構造が添付ランシートと一致（全行5列・LibraryName の生成規則）
+- NextSeq の 7 列構造が添付シートと一致（`[Settings]` は AdvancedSetting1 のみ・adapter 行なし・空行位置）
+- MiSeq の 6 列構造が既存シートと一致
+- 384サンプルテンプレートの生成（機種ごとの列数・先頭末尾の index・デモ ID の一意性）
+- index 一覧 CSV（全768件・セット単位96件）の内容と列数
 
 ## ライセンス
 

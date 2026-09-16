@@ -2,23 +2,40 @@
  * SampleSheet 作成ツール — UI レイヤー
  *
  * タブ:
- *   MiSeq i100 … UDI index（set 指定）、[Data] 8列
- *   MiSeq      … UDI index（set 指定）、[Data] 6列
- *   index 一覧 … 収録 index の参照
+ *   MiSeq i100 … SampleSheet v2（全行5列）
+ *   NextSeq    … 従来形式・7列
+ *   MiSeq      … 従来形式・6列
+ *   index 一覧 … 収録 index の参照と CSV 出力
  */
 import {
-  APP_TITLE, DEFAULTS_I100, DEFAULTS_MISEQ,
-  normalizeDate, expandSetRanges, groupIndexes, splitRows, appendSuffix,
-  buildRowsI100, buildRowsMiSeq, buildCsvI100, buildCsvMiSeq,
-  csvFileName, dataHeader, tableHeader, SET_COLUMNS,
+  APP_TITLE, DEFAULTS_I100, DEFAULTS_NEXTSEQ, DEFAULTS_MISEQ,
+  MACHINES, MACHINE_LABEL, SET_COLUMNS,
+  normalizeDate, expandSetRanges, groupIndexes, splitRows, appendSuffix, pairedSetToken,
+  buildRows, buildCsv, csvFileName, dataHeader, tableHeader,
+  buildTemplateCsv, templateFileName, buildIndexListCsv, buildIndexListCsvFor,
 } from './sheet.js';
 
 const $ = (id) => document.getElementById(id);
 
+/** 機種 → UI の接頭辞 */
+const PREFIX = { i100: 'a', nextseq: 'b', miseq: 'c' };
+/** 接頭辞 → 機種 */
+const MACHINE_OF = { a: 'i100', b: 'nextseq', c: 'miseq' };
+
+/** 接尾辞付与の対象列（機種ごと） */
+const SUFFIX_TARGETS = {
+  i100: { ids: 'a-ids' },
+  nextseq: { names: 'b-names', ids: 'b-ids', descs: 'b-descs' },
+  miseq: { ids: 'c-ids', descs: 'c-descs' },
+};
+
 const app = {
   mode: 'i100',
-  i100: { rows: [], params: null, baseline: {} },
-  miseq: { rows: [], params: null, baseline: {} },
+  state: {
+    i100: { rows: [], params: null, baseline: {} },
+    nextseq: { rows: [], params: null, baseline: {}, namesTouched: false },
+    miseq: { rows: [], params: null, baseline: {} },
+  },
 };
 
 // ══ ダイアログ・ステータス ══
@@ -39,10 +56,10 @@ function setStatus(text, isError = false) {
 }
 
 // ══ 行番号ガター ══
-/** textarea の行数に合わせて番号を描画し、スクロールを同期する */
 function attachGutter(taId, gutterId) {
   const ta = $(taId);
   const gutter = $(gutterId);
+  if (!ta || !gutter) return;
   const render = () => {
     const n = Math.max(ta.value.split('\n').length, 1);
     const frag = [];
@@ -55,9 +72,9 @@ function attachGutter(taId, gutterId) {
   ta._renderGutter = render;
   render();
 }
-/** 値を差し替えたあとに行番号を更新する */
 function setTextareaValue(id, value) {
   const ta = $(id);
+  if (!ta) return;
   ta.value = value;
   if (ta._renderGutter) ta._renderGutter();
 }
@@ -68,9 +85,9 @@ document.querySelectorAll('.mode-nb > .nb-tabs .nb-tab').forEach((btn) => {
     app.mode = btn.dataset.mode;
     document.querySelectorAll('.mode-nb > .nb-tabs .nb-tab')
       .forEach((b) => b.classList.toggle('active', b === btn));
-    $('page-i100').classList.toggle('hidden', app.mode !== 'i100');
-    $('page-miseq').classList.toggle('hidden', app.mode !== 'miseq');
-    $('page-index').classList.toggle('hidden', app.mode !== 'index');
+    ['i100', 'nextseq', 'miseq', 'index'].forEach((m) => {
+      $(`page-${m}`).classList.toggle('hidden', app.mode !== m);
+    });
     if (app.mode === 'index') renderRefTable();
   });
 });
@@ -125,7 +142,7 @@ function renderRows(treeId, rows, machine, withSetNames) {
       th.className = withSetNames ? 'setcol on' : 'setcol off';
       th.title = withSetNames ? 'CSVに出力されます' : 'CSVには出力されません（画面表示のみ）';
     }
-    if (k === 'Sample_ID' || k === 'Sample_Name' || k === 'LibraryName') th.classList.add('w-id');
+    if (['Sample_ID', 'Sample_Name', 'LibraryName'].includes(k)) th.classList.add('w-id');
     trh.appendChild(th);
   });
   thead.appendChild(trh);
@@ -147,75 +164,9 @@ function renderRows(treeId, rows, machine, withSetNames) {
   });
 }
 
-async function fillDescription(idsEl, descEl) {
-  const ids = splitRows($(idsEl).value).filter((s) => s !== '');
-  if (!ids.length) { await showMessage('データなし', 'さきに Sample_ID を入力してください。'); return; }
-  const first = splitRows($(descEl).value).filter((s) => s !== '')[0] ?? '';
-  const val = window.prompt('全行に入力する Description を指定してください。', first);
-  if (val === null) return;
-  setTextareaValue(descEl, ids.map(() => val).join('\n'));
-  setStatus(`Description を ${ids.length} 行に一括入力しました`);
-}
+// ══ Index 範囲ブロック ══
 
-/**
- * 接尾辞の付与。対象列ごとに「最初の付与前の内容」を baseline として保持する。
- */
-async function applySuffix(state, targets, targetSel, fromId, toId, textId) {
-  const key = $(targetSel).value;
-  const elId = targets[key];
-  try {
-    const before = $(elId).value;
-    const r = appendSuffix(before, Number($(fromId).value), Number($(toId).value), $(textId).value);
-    // 初回の付与時のみベースラインを記録する（2回目以降は上書きしない）
-    if (state.baseline[elId] === undefined) state.baseline[elId] = before;
-    setTextareaValue(elId, r.text);
-    setStatus(`${$(targetSel).selectedOptions[0].textContent} の ` +
-      `行 ${$(fromId).value}〜${$(toId).value} に "${$(textId).value}" を追加しました（${r.count}行）`);
-  } catch (e) { await showMessage('入力エラー', e.message); }
-}
-/** 対象列を「最初の付与前」の状態に戻す */
-async function undoSuffix(state, targets, targetSel) {
-  const key = $(targetSel).value;
-  const elId = targets[key];
-  if (state.baseline[elId] === undefined) {
-    await showMessage('取り消し不可',
-      `${$(targetSel).selectedOptions[0].textContent} には文字列追加の履歴がありません。`);
-    return;
-  }
-  setTextareaValue(elId, state.baseline[elId]);
-  delete state.baseline[elId];
-  setStatus(`${$(targetSel).selectedOptions[0].textContent} を文字列追加前の状態に戻しました`);
-}
-
-// ══════════ MiSeq i100 タブ ══════════
-function applyDefaultsI100() {
-  $('a-runname').value = DEFAULTS_I100.runName;
-  $('a-ffv').value = DEFAULTS_I100.fileFormatVersion;
-  $('a-platform').value = DEFAULTS_I100.instrumentPlatform;
-  $('a-orientation').value = DEFAULTS_I100.indexOrientation;
-  $('a-analysis').value = DEFAULTS_I100.analysisLocation;
-  $('a-read1').value = DEFAULTS_I100.read1Cycles;
-  $('a-read2').value = DEFAULTS_I100.read2Cycles;
-  $('a-idx1cyc').value = DEFAULTS_I100.index1Cycles;
-  $('a-idx2cyc').value = DEFAULTS_I100.index2Cycles;
-  $('a-swver').value = DEFAULTS_I100.softwareVersion;
-  $('a-fastqfmt').value = DEFAULTS_I100.fastqCompressionFormat;
-  $('a-nolane').value = DEFAULTS_I100.noLaneSplitting;
-  $('a-fastqc').value = DEFAULTS_I100.generateFastqcMetrics;
-  $('a-override').value = DEFAULTS_I100.overrideCycles;
-  $('a-genver').value = DEFAULTS_I100.generatedVersion;
-  $('a-project').value = DEFAULTS_I100.projectName;
-  $('a-prepkit').value = DEFAULTS_I100.libraryPrepKitName;
-  $('a-adapterkit').value = DEFAULTS_I100.indexAdapterKitName;
-}
-$('a-reset').addEventListener('click', () => {
-  applyDefaultsI100();
-  setStatus('[Header] / [Settings] を既定値に戻しました');
-});
-
-// ══ Index 範囲ブロック（複数セット対応）══
-
-/** 範囲ブロックの入力値を配列で取得する。例: readRanges('a-i7') */
+/** 範囲ブロックの入力値を配列で取得する（例: readRanges('a-i7')） */
 function readRanges(key) {
   return [...$(`${key}-rows`).querySelectorAll('.range-row')].map((row) => ({
     start: row.querySelector('.r-start').value,
@@ -223,10 +174,52 @@ function readRanges(key) {
   }));
 }
 
+/** 対応する i5 の行を取得（同じ並び順の n 番目） */
+function i5RowAt(prefix, idx) {
+  return $(`${prefix}-i5-rows`).querySelectorAll('.range-row')[idx] ?? null;
+}
+
+/**
+ * Index1 の入力に応じて Index2 を自動入力する。
+ * - 「Index2 を自動入力」が ON のときのみ動作
+ * - 対応する i5 行が未入力、または直前の自動入力値のままの場合に上書きする
+ *   （利用者が手で直した値は保持する）
+ */
+function autoFillIndex2(prefix, rowIdx) {
+  if (!$(`${prefix}-autopair`).checked) return;
+  const i7Row = $(`${prefix}-i7-rows`).querySelectorAll('.range-row')[rowIdx];
+  if (!i7Row) return;
+  let i5Row = i5RowAt(prefix, rowIdx);
+  if (!i5Row) {
+    // i7 の行数に合わせて i5 の行を増やす
+    addRangeRow(`${prefix}-i5`);
+    i5Row = i5RowAt(prefix, rowIdx);
+    if (!i5Row) return;
+  }
+  [['.r-start', 'start'], ['.r-end', 'end']].forEach(([sel]) => {
+    const src = i7Row.querySelector(sel);
+    const dst = i5Row.querySelector(sel);
+    const paired = pairedSetToken(src.value);
+    // 元が空なら対応先も空にする
+    if (src.value.trim() === '') {
+      if (dst.dataset.auto === '1') { dst.value = ''; delete dst.dataset.auto; }
+      return;
+    }
+    if (paired === null) return;
+    // 未入力、または前回の自動入力値のままなら上書きする
+    if (dst.value.trim() === '' || dst.dataset.auto === '1') {
+      dst.value = paired;
+      dst.dataset.auto = '1';
+    }
+  });
+}
+
 /** 範囲ブロックを1行追加する */
 function addRangeRow(key, start = '', end = '') {
   const rows = $(`${key}-rows`);
-  const side = key.endsWith('i7') ? 1 : 2;
+  const prefix = key.slice(0, 1);
+  const isI7 = key.endsWith('i7');
+  const side = isI7 ? 1 : 2;
   const row = document.createElement('div');
   row.className = 'range-row';
   row.innerHTML = `
@@ -239,9 +232,17 @@ function addRangeRow(key, start = '', end = '') {
   row.querySelector('.r-end').value = end;
   rows.appendChild(row);
 
-  const prefix = key.slice(0, 1);
   row.querySelectorAll('input').forEach((inp) => {
-    inp.addEventListener('input', () => refreshCount(prefix));
+    inp.addEventListener('input', () => {
+      if (isI7) {
+        const idx = [...rows.querySelectorAll('.range-row')].indexOf(row);
+        autoFillIndex2(prefix, idx);
+      } else {
+        // 手動で編集されたら自動入力マークを外す（以後は上書きしない）
+        delete inp.dataset.auto;
+      }
+      refreshCount(prefix);
+    });
   });
   row.querySelector('.r-del').addEventListener('click', () => {
     if (rows.querySelectorAll('.range-row').length <= 1) {
@@ -267,8 +268,7 @@ function renumberRanges(key) {
     const end = row.querySelector('.r-end').value.trim();
     if (start === '' && end === '') { info.textContent = ''; info.classList.remove('bad'); return; }
     try {
-      const n = expandSetRanges([{ start, end }], label).indexes.length;
-      info.textContent = `${n} index`;
+      info.textContent = `${expandSetRanges([{ start, end }], label).indexes.length} index`;
       info.classList.remove('bad');
     } catch { info.textContent = '指定エラー'; info.classList.add('bad'); }
   });
@@ -302,228 +302,294 @@ function refreshCount(prefix) {
     if (nId && (n7 < nId || n5 < nId)) el.classList.add('bad');
   } catch (e) { el.classList.add('bad'); el.textContent = e.message; }
 }
-$('a-ids').addEventListener('input', () => refreshCount('a'));
 
-const I100_TARGETS = { ids: 'a-ids' };
-$('a-suffix-apply').addEventListener('click', () =>
-  applySuffix(app.i100, I100_TARGETS, 'a-suffix-target', 'a-suffix-from', 'a-suffix-to', 'a-suffix-text'));
-$('a-suffix-undo').addEventListener('click', () =>
-  undoSuffix(app.i100, I100_TARGETS, 'a-suffix-target'));
-
-$('a-with-set').addEventListener('change', () => {
-  if (app.i100.rows.length) renderRows('a-tree', app.i100.rows, 'i100', $('a-with-set').checked);
-  setStatus($('a-with-set').checked
-    ? 'set名列をCSVに出力します（Index1_Set / Index2_Set）'
-    : 'set名列は画面表示のみでCSVには出力しません');
-});
-
-$('a-build').addEventListener('click', async () => {
-  const params = {
-    runName: $('a-runname').value.trim(),
-    fileFormatVersion: $('a-ffv').value.trim(),
-    instrumentPlatform: $('a-platform').value.trim(),
-    indexOrientation: $('a-orientation').value,
-    analysisLocation: $('a-analysis').value,
-    read1Cycles: $('a-read1').value.trim(),
-    read2Cycles: $('a-read2').value.trim(),
-    index1Cycles: $('a-idx1cyc').value.trim(),
-    index2Cycles: $('a-idx2cyc').value.trim(),
-    softwareVersion: $('a-swver').value.trim(),
-    overrideCycles: $('a-override').value.trim(),
-    fastqCompressionFormat: $('a-fastqfmt').value.trim(),
-    noLaneSplitting: $('a-nolane').value,
-    generateFastqcMetrics: $('a-fastqc').value,
-    generatedVersion: $('a-genver').value.trim(),
-  };
-  if (params.runName === '') { await showMessage('入力エラー', 'RunName を入力してください。'); return; }
-
-  let result;
-  try {
-    result = buildRowsI100({
-      sampleIds: $('a-ids').value,
-      projectName: $('a-project').value,
-      libraryPrepKitName: $('a-prepkit').value,
-      indexAdapterKitName: $('a-adapterkit').value,
-      i7Ranges: readRanges('a-i7'),
-      i5Ranges: readRanges('a-i5'),
-    });
-  } catch (e) { await showMessage('入力エラー', e.message); return; }
-
-  app.i100.rows = result.rows;
-  app.i100.params = params;
-  renderRows('a-tree', result.rows, 'i100', $('a-with-set').checked);
-  renderWarnings('a-warn', result.warnings);
-  setStatus(`[MiSeq i100] シート作成完了: ${result.rows.length}件 | RunName ${params.runName} | ` +
-            `${result.rows[0].Index1_Set} 〜 ${result.rows[result.rows.length - 1].Index1_Set} | ` +
-            `確認事項 ${result.warnings.length}件`);
-});
-
-$('a-clear').addEventListener('click', () => {
-  setTextareaValue('a-ids', '');
-  resetRanges('a-i7'); resetRanges('a-i5');
-  app.i100 = { rows: [], params: null, baseline: {} };
-  renderRows('a-tree', [], 'i100', $('a-with-set').checked);
-  renderWarnings('a-warn', []); refreshCount('a');
-  setStatus('クリアしました');
-});
-
-function ensureBuilt(state) {
-  if (!state.rows.length || !state.params) {
-    showMessage('データなし', 'さきに「シート作成」を実行してください。'); return false;
+// ══ 既定値の適用 ══
+function applyDefaults(machine) {
+  const p = PREFIX[machine];
+  if (machine === 'i100') {
+    const d = DEFAULTS_I100;
+    $(`${p}-runname`).value = d.runName;
+    $(`${p}-ffv`).value = d.fileFormatVersion;
+    $(`${p}-platform`).value = d.instrumentPlatform;
+    $(`${p}-orientation`).value = d.indexOrientation;
+    $(`${p}-analysis`).value = d.analysisLocation;
+    $(`${p}-read1`).value = d.read1Cycles;
+    $(`${p}-read2`).value = d.read2Cycles;
+    $(`${p}-idx1cyc`).value = d.index1Cycles;
+    $(`${p}-idx2cyc`).value = d.index2Cycles;
+    $(`${p}-swver`).value = d.softwareVersion;
+    $(`${p}-fastqfmt`).value = d.fastqCompressionFormat;
+    $(`${p}-nolane`).value = d.noLaneSplitting;
+    $(`${p}-fastqc`).value = d.generateFastqcMetrics;
+    $(`${p}-override`).value = d.overrideCycles;
+    $(`${p}-genver`).value = d.generatedVersion;
+    $(`${p}-project`).value = d.projectName;
+    $(`${p}-prepkit`).value = d.libraryPrepKitName;
+    $(`${p}-adapterkit`).value = d.indexAdapterKitName;
+    return;
   }
-  return true;
+  const d = machine === 'nextseq' ? DEFAULTS_NEXTSEQ : DEFAULTS_MISEQ;
+  $(`${p}-exp`).value = d.experimentName ?? '';
+  $(`${p}-module`).value = d.module;
+  $(`${p}-workflow`).value = d.workflow;
+  $(`${p}-prep`).value = d.libraryPrepKit;
+  $(`${p}-desc`).value = d.description;
+  $(`${p}-chem`).value = d.chemistry;
+  $(`${p}-adv`).value = d.advancedSetting1;
+  $(`${p}-read1`).value = d.reads[0];
+  $(`${p}-read2`).value = d.reads[1];
+  if (machine === 'nextseq') $(`${p}-indexkit`).value = d.indexKit;
+  if (machine === 'miseq') $(`${p}-adapter`).value = d.adapter;
 }
-$('a-csv').addEventListener('click', async () => {
-  if (!ensureBuilt(app.i100)) return;
-  const withSet = $('a-with-set').checked;
-  const name = csvFileName(app.i100.params.runName, 'i100');
-  downloadFile(name, buildCsvI100(app.i100.params, app.i100.rows, withSet), 'text/csv;charset=utf-8');
-  await showMessage('完了', `CSVを保存しました。\n${name}\n` +
-    `SampleSheet v2 形式・全行 5 列（set名列: ${withSet ? 'あり' : 'なし'}）`);
-});
-$('a-clip').addEventListener('click', async () => {
-  if (!ensureBuilt(app.i100)) return;
-  await copyText(buildCsvI100(app.i100.params, app.i100.rows, $('a-with-set').checked));
-  setStatus(`クリップボードにコピーしました（${app.i100.rows.length}件, CSV全文）`);
-});
-$('a-preview').addEventListener('click', () => {
-  if (!ensureBuilt(app.i100)) return;
-  $('preview-body').textContent = buildCsvI100(app.i100.params, app.i100.rows, $('a-with-set').checked);
-  $('dlg-preview').showModal();
-});
 
-$('a-demo').addEventListener('click', () => {
-  const d = new Date();
-  const p2 = (x) => String(x).padStart(2, '0');
-  $('a-runname').value = `Demo_Run_${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`;
-  $('a-project').value = 'Demo Project';
-  resetRanges('a-i7', 'set1-1-1', 'set1-1-2');
-  resetRanges('a-i5', 'set1-2-1', 'set1-2-2');
-  const ids = [];
-  for (let i = 1; i <= 8; i += 1) ids.push(`Demo-Reef-${p2(i)}_jgCO1`);
-  for (let i = 1; i <= 8; i += 1) ids.push(`Demo-Sand-${p2(i)}_jgCO1`);
-  setTextareaValue('a-ids', ids.join('\n'));
-  app.i100.baseline = {};
-  refreshCount('a');
-  setStatus('テストデータ（仮想サンプル16件）を入力しました。「シート作成」を押してください');
-});
-
-// ══════════ MiSeq タブ ══════════
-function applyDefaultsMiSeq() {
-  $('b-module').value = DEFAULTS_MISEQ.module;
-  $('b-workflow').value = DEFAULTS_MISEQ.workflow;
-  $('b-prep').value = DEFAULTS_MISEQ.libraryPrepKit;
-  $('b-desc').value = DEFAULTS_MISEQ.description;
-  $('b-chem').value = DEFAULTS_MISEQ.chemistry;
-  $('b-adapter').value = DEFAULTS_MISEQ.adapter;
-  $('b-adv').value = DEFAULTS_MISEQ.advancedSetting1;
-  $('b-read1').value = DEFAULTS_MISEQ.reads[0];
-  $('b-read2').value = DEFAULTS_MISEQ.reads[1];
-}
-$('b-reset').addEventListener('click', () => {
-  applyDefaultsMiSeq();
-  setStatus('[Header] / [Settings] を既定値に戻しました');
-});
-
-$('b-ids').addEventListener('input', () => refreshCount('b'));
-$('b-fill-desc').addEventListener('click', () => fillDescription('b-ids', 'b-descs'));
-
-const MISEQ_TARGETS = { ids: 'b-ids', descs: 'b-descs' };
-$('b-suffix-apply').addEventListener('click', () =>
-  applySuffix(app.miseq, MISEQ_TARGETS, 'b-suffix-target', 'b-suffix-from', 'b-suffix-to', 'b-suffix-text'));
-$('b-suffix-undo').addEventListener('click', () =>
-  undoSuffix(app.miseq, MISEQ_TARGETS, 'b-suffix-target'));
-
-$('b-with-set').addEventListener('change', () => {
-  if (app.miseq.rows.length) renderRows('b-tree', app.miseq.rows, 'miseq', $('b-with-set').checked);
-  setStatus($('b-with-set').checked
-    ? 'set名列をCSVに出力します（Index1_Set / Index2_Set）'
-    : 'set名列は画面表示のみでCSVには出力しません');
-});
-
-$('b-build').addEventListener('click', async () => {
-  let params;
-  try {
-    params = {
-      date: $('b-date').value.trim() === '' ? '' : normalizeDate($('b-date').value),
-      experimentName: $('b-exp').value.trim(),
-      module: $('b-module').value,
-      workflow: $('b-workflow').value,
-      libraryPrepKit: $('b-prep').value,
-      description: $('b-desc').value,
-      chemistry: $('b-chem').value,
-      adapter: $('b-adapter').value,
-      advancedSetting1: $('b-adv').value,
-      reads: [$('b-read1').value.trim(), $('b-read2').value.trim()].filter((s) => s !== ''),
+/** 入力欄から [Header] 等のパラメータを集める */
+function collectParams(machine) {
+  const p = PREFIX[machine];
+  if (machine === 'i100') {
+    return {
+      runName: $(`${p}-runname`).value.trim(),
+      fileFormatVersion: $(`${p}-ffv`).value.trim(),
+      instrumentPlatform: $(`${p}-platform`).value.trim(),
+      indexOrientation: $(`${p}-orientation`).value,
+      analysisLocation: $(`${p}-analysis`).value,
+      read1Cycles: $(`${p}-read1`).value.trim(),
+      read2Cycles: $(`${p}-read2`).value.trim(),
+      index1Cycles: $(`${p}-idx1cyc`).value.trim(),
+      index2Cycles: $(`${p}-idx2cyc`).value.trim(),
+      softwareVersion: $(`${p}-swver`).value.trim(),
+      overrideCycles: $(`${p}-override`).value.trim(),
+      fastqCompressionFormat: $(`${p}-fastqfmt`).value.trim(),
+      noLaneSplitting: $(`${p}-nolane`).value,
+      generateFastqcMetrics: $(`${p}-fastqc`).value,
+      generatedVersion: $(`${p}-genver`).value.trim(),
     };
-  } catch (e) { await showMessage('入力エラー', e.message); return; }
+  }
+  const params = {
+    experimentName: $(`${p}-exp`).value.trim(),
+    date: $(`${p}-date`).value.trim() === '' ? '' : normalizeDate($(`${p}-date`).value),
+    module: $(`${p}-module`).value,
+    workflow: $(`${p}-workflow`).value,
+    libraryPrepKit: $(`${p}-prep`).value,
+    description: $(`${p}-desc`).value,
+    chemistry: $(`${p}-chem`).value,
+    advancedSetting1: $(`${p}-adv`).value,
+    reads: [$(`${p}-read1`).value.trim(), $(`${p}-read2`).value.trim()].filter((s) => s !== ''),
+  };
+  if (machine === 'nextseq') params.indexKit = $(`${p}-indexkit`).value;
+  if (machine === 'miseq') params.adapter = $(`${p}-adapter`).value;
+  return params;
+}
 
-  let result;
-  try {
-    result = buildRowsMiSeq({
-      sampleIds: $('b-ids').value,
-      descriptions: $('b-descs').value,
-      i7Ranges: readRanges('b-i7'),
-      i5Ranges: readRanges('b-i5'),
+/** 入力欄から行構築用のオプションを集める */
+function collectRowOpts(machine) {
+  const p = PREFIX[machine];
+  const base = {
+    sampleIds: $(`${p}-ids`).value,
+    i7Ranges: readRanges(`${p}-i7`),
+    i5Ranges: readRanges(`${p}-i5`),
+  };
+  if (machine === 'i100') {
+    return {
+      ...base,
+      projectName: $(`${p}-project`).value,
+      libraryPrepKitName: $(`${p}-prepkit`).value,
+      indexAdapterKitName: $(`${p}-adapterkit`).value,
+    };
+  }
+  if (machine === 'nextseq') {
+    return { ...base, sampleNames: $(`${p}-names`).value, descriptions: $(`${p}-descs`).value };
+  }
+  return { ...base, descriptions: $(`${p}-descs`).value };
+}
+
+/** CSV のファイル名キー（i100 は RunName、他は日付） */
+function fileKey(machine, params) {
+  return machine === 'i100' ? params.runName : (params.date || params.experimentName);
+}
+
+// ══ 機種ごとのイベント登録 ══
+MACHINES.forEach((machine) => {
+  const p = PREFIX[machine];
+  const st = app.state[machine];
+
+  $(`${p}-reset`).addEventListener('click', () => {
+    applyDefaults(machine);
+    setStatus(`${MACHINE_LABEL[machine]}: 既定値に戻しました`);
+  });
+  $(`${p}-ids`).addEventListener('input', () => refreshCount(p));
+  $(`${p}-autopair`).addEventListener('change', () => {
+    if (!$(`${p}-autopair`).checked) { setStatus('Index2 の自動入力を OFF にしました'); return; }
+    const n = $(`${p}-i7-rows`).querySelectorAll('.range-row').length;
+    for (let i = 0; i < n; i += 1) autoFillIndex2(p, i);
+    refreshCount(p);
+    setStatus('Index2 の自動入力を ON にしました（Index1 の set に対応する i5 を補完します）');
+  });
+
+  // NextSeq: Sample_Name の自動追従
+  if (machine === 'nextseq') {
+    $(`${p}-names`).addEventListener('input', () => { st.namesTouched = true; });
+    $(`${p}-ids`).addEventListener('input', () => {
+      if (!st.namesTouched || $(`${p}-names`).value.trim() === '') {
+        setTextareaValue(`${p}-names`, $(`${p}-ids`).value);
+      }
     });
-  } catch (e) { await showMessage('入力エラー', e.message); return; }
+    $(`${p}-copy-names`).addEventListener('click', () => {
+      setTextareaValue(`${p}-names`, $(`${p}-ids`).value);
+      st.namesTouched = false;
+      delete st.baseline[`${p}-names`];
+      setStatus('Sample_ID を Sample_Name に反映しました');
+    });
+  }
+  // Description の一括入力
+  if (machine !== 'i100') {
+    $(`${p}-fill-desc`).addEventListener('click', async () => {
+      const ids = splitRows($(`${p}-ids`).value).filter((s) => s !== '');
+      if (!ids.length) { await showMessage('データなし', 'さきに Sample_ID を入力してください。'); return; }
+      const first = splitRows($(`${p}-descs`).value).filter((s) => s !== '')[0] ?? '';
+      const val = window.prompt('全行に入力する Description を指定してください。', first);
+      if (val === null) return;
+      setTextareaValue(`${p}-descs`, ids.map(() => val).join('\n'));
+      setStatus(`Description を ${ids.length} 行に一括入力しました`);
+    });
+  }
 
-  app.miseq.rows = result.rows;
-  app.miseq.params = params;
-  renderRows('b-tree', result.rows, 'miseq', $('b-with-set').checked);
-  renderWarnings('b-warn', result.warnings);
-  setStatus(`[MiSeq] シート作成完了: ${result.rows.length}件 | Date ${params.date || '(空欄)'} | ` +
-            `${result.rows[0].Index1_Set} 〜 ${result.rows[result.rows.length - 1].Index1_Set} | ` +
-            `確認事項 ${result.warnings.length}件`);
-});
+  // 接尾辞の付与・復元
+  $(`${p}-suffix-apply`).addEventListener('click', async () => {
+    const elId = SUFFIX_TARGETS[machine][$(`${p}-suffix-target`).value];
+    try {
+      const before = $(elId).value;
+      const r = appendSuffix(before, Number($(`${p}-suffix-from`).value),
+        Number($(`${p}-suffix-to`).value), $(`${p}-suffix-text`).value);
+      if (st.baseline[elId] === undefined) st.baseline[elId] = before;
+      setTextareaValue(elId, r.text);
+      setStatus(`${$(`${p}-suffix-target`).selectedOptions[0].textContent.trim()} の ` +
+        `行 ${$(`${p}-suffix-from`).value}〜${$(`${p}-suffix-to`).value} に ` +
+        `"${$(`${p}-suffix-text`).value}" を追加しました（${r.count}行）`);
+    } catch (e) { await showMessage('入力エラー', e.message); }
+  });
+  $(`${p}-suffix-undo`).addEventListener('click', async () => {
+    const elId = SUFFIX_TARGETS[machine][$(`${p}-suffix-target`).value];
+    if (st.baseline[elId] === undefined) {
+      await showMessage('取り消し不可', '文字列追加の履歴がありません。');
+      return;
+    }
+    setTextareaValue(elId, st.baseline[elId]);
+    delete st.baseline[elId];
+    setStatus('文字列追加前の状態に戻しました');
+  });
 
-$('b-clear').addEventListener('click', () => {
-  ['b-ids', 'b-descs'].forEach((id) => setTextareaValue(id, ''));
-  resetRanges('b-i7'); resetRanges('b-i5');
-  app.miseq = { rows: [], params: null, baseline: {} };
-  renderRows('b-tree', [], 'miseq', $('b-with-set').checked);
-  renderWarnings('b-warn', []); refreshCount('b');
-  setStatus('クリアしました');
-});
+  // set名列の切り替え
+  $(`${p}-with-set`).addEventListener('change', () => {
+    if (st.rows.length) renderRows(`${p}-tree`, st.rows, machine, $(`${p}-with-set`).checked);
+    setStatus($(`${p}-with-set`).checked
+      ? 'set名列をCSVに出力します（Index1_Set / Index2_Set）'
+      : 'set名列は画面表示のみでCSVには出力しません');
+  });
 
-$('b-csv').addEventListener('click', async () => {
-  if (!ensureBuilt(app.miseq)) return;
-  const withSet = $('b-with-set').checked;
-  const name = csvFileName(app.miseq.params.date, 'miseq');
-  downloadFile(name, buildCsvMiSeq(app.miseq.params, app.miseq.rows, withSet), 'text/csv;charset=utf-8');
-  await showMessage('完了', `CSVを保存しました。\n${name}\n列数: ${dataHeader('miseq', withSet).length}` +
-    `（set名列: ${withSet ? 'あり' : 'なし'}）`);
-});
-$('b-clip').addEventListener('click', async () => {
-  if (!ensureBuilt(app.miseq)) return;
-  await copyText(buildCsvMiSeq(app.miseq.params, app.miseq.rows, $('b-with-set').checked));
-  setStatus(`クリップボードにコピーしました（${app.miseq.rows.length}件, CSV全文）`);
-});
-$('b-preview').addEventListener('click', () => {
-  if (!ensureBuilt(app.miseq)) return;
-  $('preview-body').textContent = buildCsvMiSeq(app.miseq.params, app.miseq.rows, $('b-with-set').checked);
-  $('dlg-preview').showModal();
-});
+  // シート作成
+  $(`${p}-build`).addEventListener('click', async () => {
+    let params;
+    try { params = collectParams(machine); }
+    catch (e) { await showMessage('入力エラー', e.message); return; }
+    if (machine === 'i100' && params.runName === '') {
+      await showMessage('入力エラー', 'RunName を入力してください。'); return;
+    }
+    let result;
+    try { result = buildRows(machine, collectRowOpts(machine)); }
+    catch (e) { await showMessage('入力エラー', e.message); return; }
 
-$('b-demo').addEventListener('click', () => {
-  const d = new Date();
-  $('b-date').value = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-  $('b-exp').value = 'demo-bacteria-run';
-  resetRanges('b-i7', 'set1-1-1', 'set1-1-2');
-  resetRanges('b-i5', 'set1-2-1', 'set1-2-2');
-  const ids = []; const descs = [];
-  for (let i = 1; i <= 8; i += 1) { ids.push(`Demo-Coral-${String(i).padStart(2, '0')}`); descs.push('Coral polyp (demo)'); }
-  for (let i = 1; i <= 8; i += 1) { ids.push(`Demo-Water-${String(i).padStart(2, '0')}`); descs.push('Tank water (demo)'); }
-  setTextareaValue('b-ids', ids.join('\n'));
-  setTextareaValue('b-descs', descs.join('\n'));
-  app.miseq.baseline = {};
-  refreshCount('b');
-  setStatus('テストデータ（仮想サンプル16件）を入力しました。「シート作成」を押してください');
+    st.rows = result.rows;
+    st.params = params;
+    renderRows(`${p}-tree`, result.rows, machine, $(`${p}-with-set`).checked);
+    renderWarnings(`${p}-warn`, result.warnings);
+    setStatus(`[${MACHINE_LABEL[machine]}] シート作成完了: ${result.rows.length}件 | ` +
+      `${result.rows[0].Index1_Set} 〜 ${result.rows[result.rows.length - 1].Index1_Set} | ` +
+      `確認事項 ${result.warnings.length}件`);
+  });
+
+  // クリア
+  $(`${p}-clear`).addEventListener('click', () => {
+    Object.values(SUFFIX_TARGETS[machine]).forEach((id) => setTextareaValue(id, ''));
+    setTextareaValue(`${p}-ids`, '');
+    resetRanges(`${p}-i7`); resetRanges(`${p}-i5`);
+    st.rows = []; st.params = null; st.baseline = {};
+    if (machine === 'nextseq') st.namesTouched = false;
+    renderRows(`${p}-tree`, [], machine, $(`${p}-with-set`).checked);
+    renderWarnings(`${p}-warn`, []); refreshCount(p);
+    setStatus('クリアしました');
+  });
+
+  const ensureBuilt = () => {
+    if (!st.rows.length || !st.params) {
+      showMessage('データなし', 'さきに「シート作成」を実行してください。'); return false;
+    }
+    return true;
+  };
+
+  $(`${p}-csv`).addEventListener('click', async () => {
+    if (!ensureBuilt()) return;
+    const withSet = $(`${p}-with-set`).checked;
+    const name = csvFileName(fileKey(machine, st.params), machine);
+    downloadFile(name, buildCsv(machine, st.params, st.rows, withSet), 'text/csv;charset=utf-8');
+    await showMessage('完了', `CSVを保存しました。\n${name}\n` +
+      `${MACHINE_LABEL[machine]} 形式（set名列: ${withSet ? 'あり' : 'なし'}）`);
+  });
+  $(`${p}-clip`).addEventListener('click', async () => {
+    if (!ensureBuilt()) return;
+    await copyText(buildCsv(machine, st.params, st.rows, $(`${p}-with-set`).checked));
+    setStatus(`クリップボードにコピーしました（${st.rows.length}件, CSV全文）`);
+  });
+  $(`${p}-preview`).addEventListener('click', () => {
+    if (!ensureBuilt()) return;
+    $('preview-body').textContent = buildCsv(machine, st.params, st.rows, $(`${p}-with-set`).checked);
+    $('dlg-preview').showModal();
+  });
+
+  // 384サンプルのテンプレート出力
+  $(`${p}-template`).addEventListener('click', async () => {
+    const withSet = $(`${p}-with-set`).checked;
+    const { csv, count } = buildTemplateCsv(machine, withSet);
+    const name = templateFileName(machine, count);
+    downloadFile(name, csv, 'text/csv;charset=utf-8');
+    setStatus(`[${MACHINE_LABEL[machine]}] 384サンプルのテンプレートを出力しました（${name}）`);
+    await showMessage('テンプレート出力',
+      `384サンプルのデモデータを記載したサンプルシートを保存しました。\n${name}\n\n` +
+      `index: set1-1-1〜set4-1-12（i7 384件） / set1-2-1〜set4-2-12（i5 384件）\n` +
+      `列数: ${dataHeader(machine, withSet).length}（set名列: ${withSet ? 'あり' : 'なし'}）`);
+  });
+
+  // テストデータ入力
+  $(`${p}-demo`).addEventListener('click', () => {
+    const d = new Date();
+    const p2 = (x) => String(x).padStart(2, '0');
+    const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`;
+    if (machine === 'i100') {
+      $(`${p}-runname`).value = `Demo_Run_${stamp}`;
+      $(`${p}-project`).value = 'Demo Project';
+    } else {
+      $(`${p}-exp`).value = `Demo_Run_${stamp}`;
+      $(`${p}-date`).value = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+    }
+    resetRanges(`${p}-i7`, 'set1-1-1', 'set1-1-2');
+    resetRanges(`${p}-i5`, 'set1-2-1', 'set1-2-2');
+    const ids = []; const descs = [];
+    for (let i = 1; i <= 8; i += 1) { ids.push(`Demo-Reef-${p2(i)}`); descs.push('Reef water (demo)'); }
+    for (let i = 1; i <= 8; i += 1) { ids.push(`Demo-Sand-${p2(i)}`); descs.push('Sediment (demo)'); }
+    setTextareaValue(`${p}-ids`, ids.join('\n'));
+    if (machine === 'nextseq') {
+      setTextareaValue(`${p}-names`, ids.join('\n'));
+      st.namesTouched = false;
+    }
+    if (machine !== 'i100') setTextareaValue(`${p}-descs`, descs.join('\n'));
+    st.baseline = {};
+    refreshCount(p);
+    setStatus('テストデータ（仮想サンプル16件）を入力しました。「シート作成」を押してください');
+  });
 });
 
 $('preview-close').addEventListener('click', () => $('dlg-preview').close());
 
-// ══════════ index 一覧タブ ══════════
+// ══ index 一覧タブ ══
 function renderRefTable() {
   const set = Number($('ref-set').value);
   const side = Number($('ref-side').value);
@@ -545,15 +611,31 @@ function renderRefTable() {
 }
 ['ref-set', 'ref-side'].forEach((id) => { $(id).addEventListener('change', renderRefTable); });
 
-// ══════════ 初期化 ══════════
+$('ref-csv-one').addEventListener('click', async () => {
+  const set = Number($('ref-set').value);
+  const side = Number($('ref-side').value);
+  const name = `UDI_index_set${set}_${side === 1 ? 'i7' : 'i5'}.csv`;
+  downloadFile(name, buildIndexListCsvFor(set, side), 'text/csv;charset=utf-8');
+  setStatus(`index 一覧を出力しました（set${set} / ${side === 1 ? 'i7' : 'i5'}・96件）`);
+  await showMessage('完了', `index 一覧を保存しました。\n${name}\n96 件`);
+});
+$('ref-csv-all').addEventListener('click', async () => {
+  const name = 'UDI_index_all_768.csv';
+  downloadFile(name, buildIndexListCsv(), 'text/csv;charset=utf-8');
+  setStatus('全 index（768件）の一覧を出力しました');
+  await showMessage('完了', `全 index の一覧を保存しました。\n${name}\n768 件（4セット × i7/i5 × 96）`);
+});
+
+// ══ 初期化 ══
 document.title = APP_TITLE;
-applyDefaultsI100();
-applyDefaultsMiSeq();
-[['a-ids', 'a-ids-gutter'], ['b-ids', 'b-ids-gutter'], ['b-descs', 'b-descs-gutter']]
-  .forEach(([t, g]) => attachGutter(t, g));
-['a-i7', 'a-i5', 'b-i7', 'b-i5'].forEach((k) => resetRanges(k));
-renderRows('a-tree', [], 'i100', false);
-renderRows('b-tree', [], 'miseq', false);
-refreshCount('a');
-refreshCount('b');
+MACHINES.forEach((machine) => {
+  applyDefaults(machine);
+  const p = PREFIX[machine];
+  resetRanges(`${p}-i7`); resetRanges(`${p}-i5`);
+  renderRows(`${p}-tree`, [], machine, false);
+});
+[['a-ids', 'a-ids-gutter'],
+  ['b-ids', 'b-ids-gutter'], ['b-names', 'b-names-gutter'], ['b-descs', 'b-descs-gutter'],
+  ['c-ids', 'c-ids-gutter'], ['c-descs', 'c-descs-gutter']].forEach(([t, g]) => attachGutter(t, g));
+Object.values(PREFIX).forEach((p) => refreshCount(p));
 setStatus('準備完了');
