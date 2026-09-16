@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SampleSheet作成ツール（GenerateFASTQ）</title>
-<meta name="description" content="MiSeq / i100 の GenerateFASTQ 用 SampleSheet CSV を、UDI index の set 指定から自動生成するツール。">
+<meta name="description" content="MiSeq i100 / MiSeq の GenerateFASTQ 用 SampleSheet CSV を作成するツール。">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/styles.css">
 </head>
@@ -17,106 +17,225 @@
 <div class="app">
   <div class="nb mode-nb">
     <div class="nb-tabs" role="tablist">
-      <button class="nb-tab active" role="tab" data-mode="input">シート作成</button>
-      <button class="nb-tab" role="tab" data-mode="index">UDI index 一覧</button>
+      <button class="nb-tab active" role="tab" data-mode="i100">MiSeq i100</button>
+      <button class="nb-tab" role="tab" data-mode="miseq">MiSeq</button>
+      <button class="nb-tab" role="tab" data-mode="index">index 一覧</button>
     </div>
 
-    <!-- ───────── シート作成 ───────── -->
-    <section class="nb-page" id="page-input">
+    <!-- ════════ MiSeq i100 ════════ -->
+    <section class="nb-page" id="page-i100">
 
       <fieldset class="lf">
         <legend>[Header] / [Settings]</legend>
         <div class="param-grid">
-          <label>シーケンス日付:<input type="text" id="h-date" size="12" placeholder="2026/8/18"></label>
-          <label>Experiment Name:<input type="text" id="h-exp" size="18"></label>
-          <label>Module:<input type="text" id="h-module" size="22"></label>
-          <label>Workflow:<input type="text" id="h-workflow" size="16"></label>
+          <label>シーケンス日付:<input type="text" id="a-date" size="12" placeholder="2026/8/18"></label>
+          <label>Experiment Name:<input type="text" id="a-exp" size="18"></label>
+          <label>Module:<input type="text" id="a-module" size="22"></label>
+          <label>Workflow:<input type="text" id="a-workflow" size="16"></label>
         </div>
         <div class="param-grid">
-          <label>Library Prep Kit:<input type="text" id="h-prep" size="16"></label>
-          <label>Index Kit:<input type="text" id="h-indexkit" size="16"></label>
-          <label>Description:<input type="text" id="h-desc" size="18"></label>
-          <label>Chemistry:<input type="text" id="h-chem" size="12"></label>
+          <label>Library Prep Kit:<input type="text" id="a-prep" size="16"></label>
+          <label>Index Kit:<input type="text" id="a-indexkit" size="16"></label>
+          <label>Description:<input type="text" id="a-desc" size="18"></label>
+          <label>Chemistry:<input type="text" id="a-chem" size="12"></label>
         </div>
         <div class="param-grid">
-          <label>adapter:<input type="text" id="s-adapter" size="24"></label>
-          <label>AdvancedSetting1:<input type="text" id="s-adv" size="8"></label>
-          <label>[Reads]:<input type="text" id="h-read1" size="6"></label>
-          <label>／<input type="text" id="h-read2" size="6"></label>
-          <button type="button" id="btn-reset-header" class="ghost">既定値に戻す</button>
+          <label>adapter:<input type="text" id="a-adapter" size="24"></label>
+          <label>AdvancedSetting1:<input type="text" id="a-adv" size="8"></label>
+          <label>[Reads]:<input type="text" id="a-read1" size="6"></label>
+          <label>／<input type="text" id="a-read2" size="6"></label>
+          <button type="button" id="a-reset" class="ghost">既定値に戻す</button>
         </div>
-        <p class="hint">日付は YYYY/M/D 形式（2026-08-18 のような入力も受け付けて自動変換します）。</p>
+        <p class="hint">日付は YYYY/M/D 形式（2026-08-18 のような入力も自動変換します）。</p>
       </fieldset>
 
       <fieldset class="lf">
-        <legend>Index（UDI index for runsheet.xlsx 準拠）</legend>
+        <legend>Index（UDI index / set 指定）</legend>
         <div class="param-grid">
-          <label>Index1 / i7:<input type="text" id="idx-i7" size="30" placeholder="set1-1-1~set1-1-12"></label>
-          <label>Index2 / i5:<input type="text" id="idx-i5" size="30" placeholder="set1-2-1~set1-2-12"></label>
-          <span class="idx-count" id="idx-count">—</span>
+          <span class="idx-label">Index1 / i7</span>
+          <label>開始 set:<input type="text" id="a-i7-start" size="12" placeholder="set1-1-1"></label>
+          <label>終了 set:<input type="text" id="a-i7-end" size="12" placeholder="set1-1-12"></label>
         </div>
-        <p class="hint">1つの set（例 set1-1-3）＝ 8連チューブ1本分の 8 index。範囲は <code>set1-1-1~set1-1-12</code>、
-          省略形 <code>set1-1-1~12</code>、複数併記 <code>set1-1-1, set1-1-5</code> に対応します。</p>
+        <div class="param-grid">
+          <span class="idx-label">Index2 / i5</span>
+          <label>開始 set:<input type="text" id="a-i5-start" size="12" placeholder="set1-2-1"></label>
+          <label>終了 set:<input type="text" id="a-i5-end" size="12" placeholder="set1-2-12"></label>
+        </div>
+        <div class="param-grid">
+          <span class="idx-count" id="a-count">—</span>
+        </div>
+        <p class="hint">1つの set（例 <code>set1-1-3</code>）＝ 8連チューブ1本分の 8 index。
+          終了 set を空欄にすると開始 set のみ（8 index）、<code>12</code> のように番号だけでも指定できます。</p>
       </fieldset>
 
       <fieldset class="lf">
         <legend>[Data]（リストを貼り付け）</legend>
         <div class="text-cols three">
-          <label>Sample_ID（1行1件）<textarea id="d-ids" rows="12" spellcheck="false"></textarea></label>
-          <label>Sample_Name（空欄なら Sample_ID を反映）<textarea id="d-names" rows="12" spellcheck="false"></textarea></label>
-          <label>Description（1行1件）<textarea id="d-desc" rows="12" spellcheck="false"></textarea></label>
+          <label>Sample_ID（1行1件）<textarea id="a-ids" rows="12" spellcheck="false"></textarea></label>
+          <label>Sample_Name（空欄なら Sample_ID を反映）<textarea id="a-names" rows="12" spellcheck="false"></textarea></label>
+          <label>Description（1行1件）<textarea id="a-descs" rows="12" spellcheck="false"></textarea></label>
         </div>
         <div class="param-grid">
-          <label>Sample_Project:<input type="text" id="d-project" size="20"></label>
-          <button type="button" id="btn-copy-names" class="ghost">Sample_ID を Sample_Name に反映</button>
-          <button type="button" id="btn-fill-desc" class="ghost">Description を全行に一括入力</button>
+          <label>Sample_Project:<input type="text" id="a-project" size="20"></label>
+          <button type="button" id="a-copy-names" class="ghost">Sample_ID を Sample_Name に反映</button>
+          <button type="button" id="a-fill-desc" class="ghost">Description を全行に一括入力</button>
         </div>
       </fieldset>
 
+      <fieldset class="lf suffix-box">
+        <legend>サンプル名の末尾に文字列を追加</legend>
+        <div class="param-grid">
+          <label>対象:<select id="a-suffix-target">
+            <option value="names">Sample_Name</option>
+            <option value="ids">Sample_ID</option>
+            <option value="descs">Description</option>
+          </select></label>
+          <label>行:<input type="number" id="a-suffix-from" size="4" min="1" value="1"></label>
+          <label>〜<input type="number" id="a-suffix-to" size="4" min="1" value="8"></label>
+          <label>追加する文字列:<input type="text" id="a-suffix-text" size="14" placeholder="_16S"></label>
+          <button type="button" id="a-suffix-apply">追加</button>
+          <button type="button" id="a-suffix-undo" class="ghost">元に戻す</button>
+        </div>
+        <p class="hint">例: 行 1〜8 に <code>_16S</code> を追加すると <code>eDNA-01</code> → <code>eDNA-01_16S</code> になります。</p>
+      </fieldset>
+
       <div class="btnbar">
-        <button type="button" id="btn-build" class="primary">シート作成</button>
-        <button type="button" id="btn-clear">クリア</button>
+        <button type="button" id="a-build" class="primary">シート作成</button>
+        <button type="button" id="a-clear">クリア</button>
         <span class="vsep"></span>
-        <button type="button" id="btn-csv">CSV出力</button>
-        <button type="button" id="btn-clip">クリップボードにコピー</button>
-        <button type="button" id="btn-preview">CSVプレビュー</button>
+        <button type="button" id="a-csv">CSV出力</button>
+        <button type="button" id="a-clip">クリップボードにコピー</button>
+        <button type="button" id="a-preview">CSVプレビュー</button>
         <span class="vsep"></span>
-        <label class="chk"><input type="checkbox" id="opt-strip"> 8連チューブ色分け</label>
-        <span class="vsep"></span>
-        <button type="button" id="btn-demo" class="ghost">テストデータ入力</button>
+        <button type="button" id="a-demo" class="ghost">テストデータ入力</button>
       </div>
 
-      <div class="tree-wrap"><table class="tree" id="data-tree">
+      <div class="tree-wrap"><table class="tree" id="a-tree">
         <thead><tr>
           <th>#</th><th class="w-id">Sample_ID</th><th class="w-id">Sample_Name</th><th>Description</th>
           <th>I7_Index_ID</th><th>index</th><th>I5_Index_ID</th><th>index2</th><th>Sample_Project</th>
         </tr></thead>
         <tbody></tbody>
       </table></div>
-
-      <div class="warn-box hidden" id="warn-box"></div>
+      <div class="warn-box hidden" id="a-warn"></div>
     </section>
 
-    <!-- ───────── UDI index 一覧 ───────── -->
+    <!-- ════════ MiSeq（従来機）════════ -->
+    <section class="nb-page hidden" id="page-miseq">
+
+      <fieldset class="lf">
+        <legend>[Header] / [Settings]</legend>
+        <div class="param-grid">
+          <label>シーケンス日付:<input type="text" id="b-date" size="12" placeholder="2026/8/18"></label>
+          <label>Experiment Name:<input type="text" id="b-exp" size="20"></label>
+          <label>Module:<input type="text" id="b-module" size="22"></label>
+          <label>Workflow:<input type="text" id="b-workflow" size="16"></label>
+        </div>
+        <div class="param-grid">
+          <label>Library Prep Kit:<input type="text" id="b-prep" size="16"></label>
+          <label>Description:<input type="text" id="b-desc" size="22"></label>
+          <label>Chemistry:<input type="text" id="b-chem" size="12"></label>
+        </div>
+        <div class="param-grid">
+          <label>adapter:<input type="text" id="b-adapter" size="24"></label>
+          <label>AdvancedSetting1:<input type="text" id="b-adv" size="8"></label>
+          <label>[Reads]:<input type="text" id="b-read1" size="6"></label>
+          <label>／<input type="text" id="b-read2" size="6"></label>
+          <button type="button" id="b-reset" class="ghost">既定値に戻す</button>
+        </div>
+        <p class="hint">MiSeq 用シートは [Data] が 6 列（Sample_Name / Sample_Project なし）、Index Kit 行なしで出力されます。</p>
+      </fieldset>
+
+      <fieldset class="lf">
+        <legend>Index（Nextera）</legend>
+        <div class="param-grid">
+          <span class="idx-label">Index1 / i7</span>
+          <label>開始:<select id="b-i7-start"></select></label>
+          <label>終了:<select id="b-i7-end"></select></label>
+        </div>
+        <div class="param-grid">
+          <span class="idx-label">Index2 / i5</span>
+          <label>開始:<select id="b-i5-start"></select></label>
+          <label>終了:<select id="b-i5-end"></select></label>
+        </div>
+        <div class="param-grid">
+          <span class="idx-count" id="b-count">—</span>
+        </div>
+        <p class="hint">I7 を開始から終了まで順に巡回し、1巡するごとに I5 を次へ送ります（従来シートと同じ割当）。</p>
+      </fieldset>
+
+      <fieldset class="lf">
+        <legend>[Data]（リストを貼り付け）</legend>
+        <div class="text-cols two">
+          <label>Sample_ID（1行1件）<textarea id="b-ids" rows="12" spellcheck="false"></textarea></label>
+          <label>Description（1行1件）<textarea id="b-descs" rows="12" spellcheck="false"></textarea></label>
+        </div>
+        <div class="param-grid">
+          <button type="button" id="b-fill-desc" class="ghost">Description を全行に一括入力</button>
+        </div>
+      </fieldset>
+
+      <fieldset class="lf suffix-box">
+        <legend>サンプル名の末尾に文字列を追加</legend>
+        <div class="param-grid">
+          <label>対象:<select id="b-suffix-target">
+            <option value="ids">Sample_ID</option>
+            <option value="descs">Description</option>
+          </select></label>
+          <label>行:<input type="number" id="b-suffix-from" size="4" min="1" value="1"></label>
+          <label>〜<input type="number" id="b-suffix-to" size="4" min="1" value="8"></label>
+          <label>追加する文字列:<input type="text" id="b-suffix-text" size="14" placeholder="_16S"></label>
+          <button type="button" id="b-suffix-apply">追加</button>
+          <button type="button" id="b-suffix-undo" class="ghost">元に戻す</button>
+        </div>
+      </fieldset>
+
+      <div class="btnbar">
+        <button type="button" id="b-build" class="primary">シート作成</button>
+        <button type="button" id="b-clear">クリア</button>
+        <span class="vsep"></span>
+        <button type="button" id="b-csv">CSV出力</button>
+        <button type="button" id="b-clip">クリップボードにコピー</button>
+        <button type="button" id="b-preview">CSVプレビュー</button>
+        <span class="vsep"></span>
+        <button type="button" id="b-demo" class="ghost">テストデータ入力</button>
+      </div>
+
+      <div class="tree-wrap"><table class="tree" id="b-tree">
+        <thead><tr>
+          <th>#</th><th class="w-id">Sample_ID</th><th>Description</th>
+          <th>I7_Index_ID</th><th>index</th><th>I5_Index_ID</th><th>index2</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <div class="warn-box hidden" id="b-warn"></div>
+    </section>
+
+    <!-- ════════ index 一覧 ════════ -->
     <section class="nb-page hidden" id="page-index">
       <fieldset class="lf">
-        <legend>表示するセット</legend>
+        <legend>表示する index</legend>
         <div class="param-grid">
-          <label>セット:<select id="ref-set">
-            <option value="1">UDI index set1</option>
-            <option value="2">UDI index set2</option>
-            <option value="3">UDI index set3</option>
-            <option value="4">UDI index set4</option>
+          <label>種別:<select id="ref-kind">
+            <option value="udi">UDI index（MiSeq i100）</option>
+            <option value="nextera">Nextera index（MiSeq）</option>
           </select></label>
-          <label>側:<select id="ref-side">
+          <label class="udi-only">セット:<select id="ref-set">
+            <option value="1">set1</option><option value="2">set2</option>
+            <option value="3">set3</option><option value="4">set4</option>
+          </select></label>
+          <label class="udi-only">側:<select id="ref-side">
             <option value="1">Index1 / i7（setN-1-K）</option>
             <option value="2">Index2 / i5（setN-2-K）</option>
           </select></label>
+          <label class="nextera-only hidden">側:<select id="ref-nx-side">
+            <option value="i7">Index1 / i7（N7xx）</option>
+            <option value="i5">Index2 / i5（S5xx）</option>
+          </select></label>
         </div>
-        <p class="hint">元データ: UDI index for runsheet.xlsx。1グループ = 8連チューブ1本（8 index）、1セット = 12グループ = 96 index。</p>
       </fieldset>
       <div class="tree-wrap"><table class="tree" id="ref-tree">
-        <thead><tr><th>set ラベル</th><th>位置</th><th>Index_ID</th><th>index 配列</th></tr></thead>
+        <thead><tr><th>ラベル</th><th>位置</th><th>Index_ID</th><th>index 配列</th></tr></thead>
         <tbody></tbody>
       </table></div>
     </section>
@@ -125,7 +244,6 @@
 
 <div class="statusbar" id="statusbar">準備完了</div>
 
-<!-- ══ CSVプレビュー ダイアログ ══ -->
 <dialog id="dlg-preview">
   <h2>CSVプレビュー</h2>
   <pre id="preview-body"></pre>
@@ -134,7 +252,6 @@
   </div>
 </dialog>
 
-<!-- ══ 汎用メッセージダイアログ ══ -->
 <dialog id="dlg-msg">
   <h2 id="msg-title"></h2>
   <p id="msg-body"></p>

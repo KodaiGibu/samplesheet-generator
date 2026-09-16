@@ -1,14 +1,21 @@
 /**
  * SampleSheet 作成ツール — ロジックコア
  *
- * MiSeq / i100 の GenerateFASTQ 用 SampleSheet CSV を生成する。
+ * 対応機種:
+ *   - MiSeq i100 : UDI index（set 指定）、[Data] 8列
+ *   - MiSeq      : Nextera index（N7xx / S5xx）、[Data] 6列
+ *
  * 依存なしの ES Module。ブラウザ / Node の両方から import 可能。
  */
 import { UDI_INDEX, GROUP_SIZE, GROUP_COUNT } from './udi-data.js';
+import { NEXTERA_I7, NEXTERA_I5, nexteraPos } from './nextera-data.js';
+
+export const APP_TITLE = 'SampleSheet作成ツール（GenerateFASTQ）';
 
 // ══ 既定値 ══
-export const APP_TITLE = 'SampleSheet作成ツール（GenerateFASTQ）';
-export const DEFAULTS = {
+
+/** MiSeq i100 用の既定値 */
+export const DEFAULTS_I100 = {
   module: 'GenerateFASTQ - 3.1.0',
   workflow: 'GenerateFASTQ',
   libraryPrepKit: '',
@@ -21,14 +28,28 @@ export const DEFAULTS = {
   reads: ['301', '301'],
 };
 
-/** [Data] セクションのヘッダ（列順は固定） */
-export const DATA_HEADER = [
+/** MiSeq（従来機）用の既定値。i100 を基準に、Module のみ従来機の値とする */
+export const DEFAULTS_MISEQ = {
+  module: 'GenerateFASTQ - 2.0.0',
+  workflow: 'GenerateFASTQ',
+  libraryPrepKit: '',
+  description: '',
+  chemistry: 'Amplicon',
+  adapter: 'CTGTCTCTTATACACATCT',
+  advancedSetting1: '123',
+  reads: ['301', '301'],
+};
+
+/** [Data] のヘッダ（機種ごとに列構成が異なる） */
+export const DATA_HEADER_I100 = [
   'Sample_ID', 'Sample_Name', 'Description',
   'I7_Index_ID', 'index', 'I5_Index_ID', 'index2', 'Sample_Project',
 ];
+export const DATA_HEADER_MISEQ = [
+  'Sample_ID', 'Description', 'I7_Index_ID', 'index', 'I5_Index_ID', 'index2',
+];
 
-/** CSV の総列数（[Header] 等の行はこの列数までカンマで埋める） */
-export const CSV_COLUMNS = DATA_HEADER.length;
+export { GROUP_SIZE, GROUP_COUNT, NEXTERA_I7, NEXTERA_I5 };
 
 // ══ 日付 ══
 
@@ -54,7 +75,7 @@ export function normalizeDate(text) {
   return `${y}/${mo}/${da}`;
 }
 
-// ══ set 指定のパース ══
+// ══ set 指定（MiSeq i100）══
 
 const SET_RE = /^set([1-4])-([12])-(\d{1,2})$/i;
 
@@ -70,44 +91,6 @@ export function parseSetToken(token) {
   return { set: Number(m[1]), side: Number(m[2]), group };
 }
 
-/**
- * set 指定文字列を展開して index の配列を返す。
- * 対応する記法:
- *   - 単独      : "set1-1-1"
- *   - 範囲      : "set1-1-1~set1-1-12" （~ ～ - all OK）、"set1-1-1-12" のような省略形も可
- *   - 複数指定  : カンマ / タブ / 空白 / 改行区切りで併記
- * @returns {{id:string, seq:string, label:string}[]}
- */
-export function expandSetSpec(spec) {
-  const text = String(spec).trim();
-  if (text === '') return [];
-  // 区切り: 改行・カンマ・タブ・全角読点・空白
-  const tokens = text.split(/[\r\n,、\t ]+/).map((s) => s.trim()).filter(Boolean);
-  const out = [];
-  for (const raw of tokens) {
-    // 範囲記法（~ ～ .. の前後）
-    const rangeParts = raw.split(/[~～]|\.\./).map((s) => s.trim()).filter(Boolean);
-    if (rangeParts.length === 2) {
-      const a = parseSetToken(rangeParts[0]);
-      // 終端は "set1-1-12" でも "12" でも受け付ける
-      const b = /^\d{1,2}$/.test(rangeParts[1])
-        ? { ...a, group: Number(rangeParts[1]) }
-        : parseSetToken(rangeParts[1]);
-      if (a.set !== b.set || a.side !== b.side) {
-        throw new Error(`範囲指定は同じセット・同じ側で指定してください: "${raw}"`);
-      }
-      if (b.group < a.group) throw new Error(`範囲の終端が開始より小さいです: "${raw}"`);
-      if (b.group > GROUP_COUNT) throw new Error(`グループ番号は 1〜${GROUP_COUNT} です: "${raw}"`);
-      for (let g = a.group; g <= b.group; g += 1) out.push(...groupIndexes(a.set, a.side, g));
-      continue;
-    }
-    if (rangeParts.length > 2) throw new Error(`範囲指定が不正です: "${raw}"`);
-    const one = parseSetToken(raw);
-    out.push(...groupIndexes(one.set, one.side, one.group));
-  }
-  return out;
-}
-
 /** 指定グループ（8連1本）の index 8 件を返す */
 export function groupIndexes(set, side, group) {
   const key = `set${set}-${side}`;
@@ -115,35 +98,98 @@ export function groupIndexes(set, side, group) {
   if (!table) throw new Error(`未知のセットです: ${key}`);
   const arr = table[String(group)];
   if (!arr) throw new Error(`未知のグループです: ${key}-${group}`);
-  return arr.map(([id, seq], i) => ({
-    id, seq, label: `${key}-${group}-${i + 1}`,
-  }));
+  return arr.map(([id, seq], i) => ({ id, seq, label: `${key}-${group}-${i + 1}` }));
+}
+
+/**
+ * 開始 set と終了 set を別々に受け取り、その範囲の index を展開する。
+ * 終了側は "set1-1-12" でも "12" でも可。終了が空なら開始のみ（8件）。
+ * @param {string} startToken 例 "set1-1-1"
+ * @param {string} endToken   例 "set1-1-12" / "12" / ""
+ * @returns {{id:string, seq:string, label:string}[]}
+ */
+export function expandSetRange(startToken, endToken, labelForError = 'Index') {
+  const s = String(startToken ?? '').trim();
+  const e = String(endToken ?? '').trim();
+  if (s === '') {
+    if (e === '') return [];
+    throw new Error(`${labelForError} の開始 set を入力してください。`);
+  }
+  const a = parseSetToken(s);
+  let b;
+  if (e === '') {
+    b = a;
+  } else if (/^\d{1,2}$/.test(e)) {
+    const g = Number(e);
+    if (g < 1 || g > GROUP_COUNT) throw new Error(`グループ番号は 1〜${GROUP_COUNT} です: "${e}"`);
+    b = { ...a, group: g };
+  } else {
+    b = parseSetToken(e);
+  }
+  if (a.set !== b.set || a.side !== b.side) {
+    throw new Error(`${labelForError} の開始と終了は同じセット・同じ側で指定してください（${s} / ${e}）。`);
+  }
+  if (b.group < a.group) {
+    throw new Error(`${labelForError} の終了 set が開始より前です（${s} / ${e}）。`);
+  }
+  const out = [];
+  for (let g = a.group; g <= b.group; g += 1) out.push(...groupIndexes(a.set, a.side, g));
+  return out;
 }
 
 // ══ 行のリスト入力 ══
 
-/** 改行区切りのテキストを配列へ（末尾の空行のみ除去し、途中の空行は空文字として保持） */
+/** 改行区切りのテキストを配列へ（末尾の空行のみ除去） */
 export function splitRows(text) {
   const t = String(text).replace(/\r\n?/g, '\n').replace(/\n+$/, '');
   if (t === '') return [];
   return t.split('\n').map((s) => s.trim());
 }
 
-// ══ サンプル表の組み立て ══
+// ══ サンプル名への接尾辞付与 ══
 
 /**
- * 入力から [Data] セクションの行配列を構築する。
- * @returns {{rows:Object[], warnings:string[]}}
- * @throws {Error} 件数不一致などの致命的エラー
+ * 指定行範囲の値の末尾に文字列を追加する。
+ * @param {string} text   改行区切りのリスト
+ * @param {number} from   開始行（1始まり・含む）
+ * @param {number} to     終了行（1始まり・含む）
+ * @param {string} suffix 追加する文字列
+ * @returns {{text:string, count:number}}
  */
-export function buildRows({ sampleIds, sampleNames, descriptions, i7Spec, i5Spec, sampleProject }) {
+export function appendSuffix(text, from, to, suffix) {
+  const rows = splitRows(text);
+  if (!rows.length) throw new Error('対象のリストが空です。');
+  if (!Number.isInteger(from) || !Number.isInteger(to)) throw new Error('行番号は整数で指定してください。');
+  if (from < 1 || to < 1) throw new Error('行番号は 1 以上で指定してください。');
+  if (from > to) throw new Error(`開始行が終了行より後になっています（${from} 〜 ${to}）。`);
+  if (to > rows.length) throw new Error(`終了行がリストの行数 (${rows.length}) を超えています。`);
+  if (suffix === '') throw new Error('追加する文字列を入力してください。');
+  let count = 0;
+  const out = rows.map((v, i) => {
+    const n = i + 1;
+    if (n >= from && n <= to && v !== '') { count += 1; return v + suffix; }
+    return v;
+  });
+  return { text: out.join('\n'), count };
+}
+
+// ══ サンプル表の組み立て（MiSeq i100）══
+
+/**
+ * @returns {{rows:Object[], warnings:string[]}}
+ * @throws {Error}
+ */
+export function buildRowsI100({
+  sampleIds, sampleNames, descriptions,
+  i7Start, i7End, i5Start, i5End, sampleProject,
+}) {
   const ids = splitRows(sampleIds).filter((s) => s !== '');
   if (!ids.length) throw new Error('Sample_ID を入力してください。');
 
   const names = splitRows(sampleNames);
   const descs = splitRows(descriptions);
-  const i7 = expandSetSpec(i7Spec);
-  const i5 = expandSetSpec(i5Spec);
+  const i7 = expandSetRange(i7Start, i7End, 'Index1 (i7)');
+  const i5 = expandSetRange(i5Start, i5End, 'Index2 (i5)');
 
   if (!i7.length) throw new Error('Index1 (i7) の set を指定してください。');
   if (!i5.length) throw new Error('Index2 (i5) の set を指定してください。');
@@ -160,13 +206,7 @@ export function buildRows({ sampleIds, sampleNames, descriptions, i7Spec, i5Spec
   const warnings = [];
   if (i7.length > ids.length) warnings.push(`Index1 は ${i7.length - ids.length}件 余っています（先頭から順に割当）。`);
   if (i5.length > ids.length) warnings.push(`Index2 は ${i5.length - ids.length}件 余っています（先頭から順に割当）。`);
-
-  // Sample_ID の重複チェック
-  const seen = new Map();
-  ids.forEach((id, i) => {
-    if (seen.has(id)) warnings.push(`Sample_ID の重複: "${id}"（行 ${seen.get(id) + 1} と ${i + 1}）`);
-    else seen.set(id, i);
-  });
+  checkDuplicateIds(ids, warnings);
 
   const rows = ids.map((id, i) => ({
     Sample_ID: id,
@@ -178,78 +218,155 @@ export function buildRows({ sampleIds, sampleNames, descriptions, i7Spec, i5Spec
     index2: i5[i].seq,
     Sample_Project: sampleProject ?? '',
   }));
+  checkDuplicateIndexPairs(rows, warnings);
+  return { rows, warnings };
+}
 
-  // index の組み合わせ重複チェック
+// ══ サンプル表の組み立て（MiSeq / Nextera）══
+
+/**
+ * Nextera index の割当。
+ *   I7 を開始位置から終了位置まで巡回し、1巡するごとに I5 を次へ送る。
+ * @returns {{rows:Object[], warnings:string[]}}
+ */
+export function buildRowsMiSeq({
+  sampleIds, descriptions, i7Start, i7End, i5Start, i5End,
+}) {
+  const ids = splitRows(sampleIds).filter((s) => s !== '');
+  if (!ids.length) throw new Error('Sample_ID を入力してください。');
+  const descs = splitRows(descriptions);
+  if (descs.length && descs.length !== ids.length) {
+    throw new Error(`Sample_ID (${ids.length}行) と Description (${descs.length}行) の行数が不一致。`);
+  }
+
+  const i7 = sliceNextera(NEXTERA_I7, i7Start, i7End, 'Index1 (i7)');
+  const i5 = sliceNextera(NEXTERA_I5, i5Start, i5End, 'Index2 (i5)');
+  const capacity = i7.length * i5.length;
+  if (ids.length > capacity) {
+    throw new Error(`index の組み合わせが不足しています（サンプル ${ids.length}件 に対し ` +
+      `i7 ${i7.length}件 × i5 ${i5.length}件 = ${capacity}通り）。`);
+  }
+
+  const warnings = [];
+  if (capacity > ids.length) {
+    warnings.push(`index の組み合わせは ${capacity - ids.length}通り 余っています（i7 を巡回し i5 を送る順で割当）。`);
+  }
+  checkDuplicateIds(ids, warnings);
+
+  const rows = ids.map((id, i) => {
+    const a = i7[i % i7.length];
+    const b = i5[Math.floor(i / i7.length)];
+    return {
+      Sample_ID: id,
+      Description: descs[i] ?? '',
+      I7_Index_ID: a[0],
+      index: a[1],
+      I5_Index_ID: b[0],
+      index2: b[1],
+    };
+  });
+  checkDuplicateIndexPairs(rows, warnings);
+  return { rows, warnings };
+}
+
+/** Nextera リストを ID の範囲で切り出す */
+export function sliceNextera(list, startId, endId, label) {
+  const s = String(startId ?? '').trim();
+  const e = String(endId ?? '').trim();
+  const from = s === '' ? 0 : nexteraPos(list, s);
+  if (from < 0) throw new Error(`${label} の開始 ID が見つかりません: "${s}"`);
+  const to = e === '' ? list.length - 1 : nexteraPos(list, e);
+  if (to < 0) throw new Error(`${label} の終了 ID が見つかりません: "${e}"`);
+  if (to < from) throw new Error(`${label} の終了 ID が開始より前です（${s} / ${e}）。`);
+  return list.slice(from, to + 1);
+}
+
+// ══ 共通チェック ══
+
+function checkDuplicateIds(ids, warnings) {
+  const seen = new Map();
+  ids.forEach((id, i) => {
+    if (seen.has(id)) warnings.push(`Sample_ID の重複: "${id}"（行 ${seen.get(id) + 1} と ${i + 1}）`);
+    else seen.set(id, i);
+  });
+}
+function checkDuplicateIndexPairs(rows, warnings) {
   const combo = new Map();
   rows.forEach((r, i) => {
     const k = `${r.index}/${r.index2}`;
     if (combo.has(k)) warnings.push(`index の組み合わせが重複: ${k}（行 ${combo.get(k) + 1} と ${i + 1}）`);
     else combo.set(k, i);
   });
-
-  return { rows, warnings };
 }
 
 // ══ CSV 生成 ══
 
-/** CSV の 1 セル分のエスケープ */
 function esc(v) {
   const s = v === undefined || v === null ? '' : String(v);
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
-
-/** 指定セルを CSV_COLUMNS 列までカンマで埋めて 1 行にする */
-function padLine(cells) {
+function padLine(cells, columns) {
   const a = cells.map(esc);
-  while (a.length < CSV_COLUMNS) a.push('');
+  while (a.length < columns) a.push('');
   return a.join(',');
 }
 
-/**
- * SampleSheet CSV 文字列を生成する。
- * @returns {string} CRLF 区切りの CSV
- */
-export function buildCsv(params, rows) {
-  const p = { ...DEFAULTS, ...params };
+/** MiSeq i100 用 SampleSheet CSV（[Data] 8列・Index Kit 行あり） */
+export function buildCsvI100(params, rows) {
+  const p = { ...DEFAULTS_I100, ...params };
+  const n = DATA_HEADER_I100.length;
   const lines = [
-    padLine(['[Header]']),
-    padLine(['Experiment Name', p.experimentName ?? '']),
-    padLine(['Date', p.date]),
-    padLine(['Module', p.module]),
-    padLine(['Workflow', p.workflow]),
-    padLine(['Library Prep Kit', p.libraryPrepKit]),
-    padLine(['Index Kit', p.indexKit]),
-    padLine(['Description', p.description]),
-    padLine(['Chemistry', p.chemistry]),
-    padLine(['[Reads]']),
-    ...p.reads.map((r) => padLine([r])),
-    padLine(['[Settings]']),
-    padLine(['adapter', p.adapter]),
-    padLine(['AdvancedSetting1', p.advancedSetting1]),
-    padLine(['[Data]']),
-    DATA_HEADER.map(esc).join(','),
-    ...rows.map((r) => DATA_HEADER.map((k) => esc(r[k])).join(',')),
+    padLine(['[Header]'], n),
+    padLine(['Experiment Name', p.experimentName ?? ''], n),
+    padLine(['Date', p.date], n),
+    padLine(['Module', p.module], n),
+    padLine(['Workflow', p.workflow], n),
+    padLine(['Library Prep Kit', p.libraryPrepKit], n),
+    padLine(['Index Kit', p.indexKit], n),
+    padLine(['Description', p.description], n),
+    padLine(['Chemistry', p.chemistry], n),
+    padLine(['[Reads]'], n),
+    ...p.reads.map((r) => padLine([r], n)),
+    padLine(['[Settings]'], n),
+    padLine(['adapter', p.adapter], n),
+    padLine(['AdvancedSetting1', p.advancedSetting1], n),
+    padLine(['[Data]'], n),
+    DATA_HEADER_I100.map(esc).join(','),
+    ...rows.map((r) => DATA_HEADER_I100.map((k) => esc(r[k])).join(',')),
   ];
   return lines.join('\r\n') + '\r\n';
 }
 
-/** 保存ファイル名: SampleSheet_YYYYMMDD.csv */
-export function csvFileName(dateStr) {
+/** MiSeq（従来機）用 SampleSheet CSV（[Data] 6列・Index Kit 行なし） */
+export function buildCsvMiSeq(params, rows) {
+  const p = { ...DEFAULTS_MISEQ, ...params };
+  const n = DATA_HEADER_MISEQ.length;
+  const lines = [
+    padLine(['[Header]'], n),
+    padLine(['Experiment Name', p.experimentName ?? ''], n),
+    padLine(['Date', p.date], n),
+    padLine(['Module', p.module], n),
+    padLine(['Workflow', p.workflow], n),
+    padLine(['Library Prep Kit', p.libraryPrepKit], n),
+    padLine(['Description', p.description], n),
+    padLine(['Chemistry', p.chemistry], n),
+    padLine(['[Reads]'], n),
+    ...p.reads.map((r) => padLine([r], n)),
+    padLine(['[Settings]'], n),
+    padLine(['adapter', p.adapter], n),
+    padLine(['AdvancedSetting1', p.advancedSetting1], n),
+    padLine(['[Data]'], n),
+    DATA_HEADER_MISEQ.map(esc).join(','),
+    ...rows.map((r) => DATA_HEADER_MISEQ.map((k) => esc(r[k])).join(',')),
+  ];
+  return lines.join('\r\n') + '\r\n';
+}
+
+/** 保存ファイル名 */
+export function csvFileName(dateStr, machine) {
+  const tag = machine === 'miseq' ? 'MiSeq' : 'MiSeq-i100';
   const m = String(dateStr).match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
-  if (!m) return 'SampleSheet.csv';
-  const p2 = (n) => String(n).padStart(2, '0');
-  return `SampleSheet_${m[1]}${p2(m[2])}${p2(m[3])}.csv`;
-}
-
-// ══ 8連チューブ色分け（DNA希釈計算ツールと同じ規則）══
-export const STRIP_SIZE = GROUP_SIZE;
-export const STRIP_COLORS = ['#e3f2fd', '#fff9c4'];
-export const WARN_COLOR = '#ffd6d6';
-
-export function stripTag(rowIdx, useStrip) {
-  if (useStrip) return `strip${Math.floor(rowIdx / STRIP_SIZE) % 2}`;
-  return 'normal';
-}
-export function stripGroup(rowIdx) {
-  return Math.floor(rowIdx / STRIP_SIZE) + 1;
+  if (!m) return `SampleSheet_${tag}.csv`;
+  const p2 = (x) => String(x).padStart(2, '0');
+  return `SampleSheet_${tag}_${m[1]}${p2(m[2])}${p2(m[3])}.csv`;
 }

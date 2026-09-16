@@ -1,12 +1,12 @@
 /**
  * UDI index データ（UDI index for runsheet.xlsx から生成）
  *
- * 構造: UDI_INDEX["set1-1"]["3"] = [[I7_Index_ID, index], ... 8件]
- *   - キー "setN-M" の N = UDI index セット番号(1-4)、M = 1:i7(Index1) / 2:i5(Index2)
- *   - 各グループ（setN-M-K の K=1〜12）は 8 連チューブ 1 本分の 8 индексに対応する
- *   - 1セットあたり 12 グループ × 8 = 96 index
+ * 構造: UDI_INDEX["set1-1"]["3"] = [[Index_ID, index], ... 8件]
+ *   - キー "setN-M" の N = セット番号(1-4)、M = 1:Index1(i7) / 2:Index2(i5)
+ *   - グループ setN-M-K（K=1〜12）は 8連チューブ 1 本分の 8 index に対応
+ *   - 1セット = 12グループ × 8 = 96 index、全4セットで 768 index
  *
- * このファイルは手動編集しないこと（元データは UDI index for runsheet.xlsx）。
+ * このファイルは自動生成物のため手動編集しないこと。
  */
 
 export const UDI_INDEX = {
@@ -124,7 +124,7 @@ export const UDI_INDEX = {
   },
 };
 
-/** セット番号一覧（1〜4） */
+/** セット番号一覧 */
 export const SET_NUMBERS = [1, 2, 3, 4];
 /** 1グループ（setN-M-K）あたりの index 数 = 8連チューブ1本 */
 export const GROUP_SIZE = 8;

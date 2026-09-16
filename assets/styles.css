@@ -2,9 +2,7 @@
 :root{
   --brand:#2c5f8a;
   --brand-dark:#22496b;
-  --strip0:#e3f2fd;
-  --strip1:#fff9c4;
-  --warn:#ffd6d6;
+  --accent:#e3f2fd;
   --line:#c8d2dc;
   --panel:#f0f0f0;
   --text:#1f2933;
@@ -34,13 +32,22 @@ body{
 /* ── LabelFrame ── */
 .lf{border:1px solid var(--line);border-radius:5px;padding:8px 12px;margin:0 0 6px;background:var(--panel)}
 .lf legend{padding:0 6px;font-weight:600;color:var(--brand);font-size:.92em}
+.lf.suffix-box{background:#fffbe6;border-color:#e8d98a}
+.lf.suffix-box legend{color:#8a6d00}
 .param-grid{display:flex;flex-wrap:wrap;gap:6px 20px;align-items:center;padding:3px 0}
 label{display:inline-flex;align-items:center;gap:6px;font-size:.93em}
-label.chk{gap:5px}
-input[type=text],select{
+input[type=text],input[type=number],select{
   font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:#fff;
 }
-#idx-i7,#idx-i5{font-family:ui-monospace,'Consolas',monospace;font-size:.92em}
+input[type=number]{width:5.5em}
+#a-i7-start,#a-i7-end,#a-i5-start,#a-i5-end{font-family:ui-monospace,'Consolas',monospace;font-size:.92em}
+#b-i7-start,#b-i7-end,#b-i5-start,#b-i5-end{font-family:ui-monospace,'Consolas',monospace;font-size:.92em}
+.idx-label{
+  display:inline-block;min-width:92px;font-size:.9em;font-weight:600;color:var(--brand);
+  background:var(--accent);border:1px solid #b8d4ea;border-radius:3px;padding:2px 10px;text-align:center;
+}
+/* 種別切替で出し分ける項目 */
+.udi-only,.nextera-only{display:inline-flex}
 .hint{margin:4px 0 0;font-size:.82em;color:#5b6b7b}
 .hint code{background:#fff;border:1px solid var(--line);border-radius:3px;padding:0 4px;font-size:.95em}
 .idx-count{
@@ -52,6 +59,7 @@ input[type=text],select{
 /* ── Text 入力欄 ── */
 .text-cols{display:grid;gap:8px}
 .text-cols.three{grid-template-columns:1fr 1fr 1fr}
+.text-cols.two{grid-template-columns:1fr 1fr}
 .text-cols label{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%}
 textarea{
   font-family:ui-monospace,'Consolas','Courier New',monospace;font-size:.88em;width:100%;
@@ -82,10 +90,8 @@ table.tree td.left{text-align:left}
 table.tree td.num{text-align:right;color:#6b7a89;background:#f7f9fb}
 table.tree td.mono{font-family:ui-monospace,'Consolas',monospace;letter-spacing:.04em}
 table.tree td.strong{font-weight:600;color:var(--brand)}
-tbody tr.strip0 td{background:var(--strip0)}
-tbody tr.strip1 td{background:var(--strip1)}
-tbody tr.warn td{background:var(--warn)}
-tbody tr.strip0 td.num,tbody tr.strip1 td.num{background:#f7f9fb}
+table.tree tbody tr:nth-child(even) td{background:#f9f9f9}
+table.tree tbody tr:nth-child(even) td.num{background:#f2f5f8}
 
 /* ── 警告ボックス ── */
 .warn-box{
@@ -118,6 +124,6 @@ dialog h2{margin:0 0 10px;font-size:1rem;color:var(--brand)}
 #msg-body{white-space:pre-wrap;font-size:.93em;margin:0}
 
 @media (max-width:980px){
-  .text-cols.three{grid-template-columns:1fr}
+  .text-cols.three,.text-cols.two{grid-template-columns:1fr}
   .app{padding:6px}
 }
