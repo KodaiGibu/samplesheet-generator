@@ -95,17 +95,13 @@ export const DATA_HEADER_MISEQ = [
   'Sample_ID', 'Description', 'I7_Index_ID', 'index', 'I5_Index_ID', 'index2',
 ];
 
-/** 機種ごとの基本データ列 */
 function baseHeader(machine) {
   if (machine === 'miseq') return DATA_HEADER_MISEQ;
   if (machine === 'nextseq') return DATA_HEADER_NEXTSEQ;
   return BCL_HEADER;
 }
 
-/**
- * CSV 用のデータ列ヘッダを返す。
- * set名列は Index / index2 の直後に差し込む。
- */
+/** CSV 用のデータ列ヘッダを返す（set名列は Index / index2 の直後に差し込む） */
 export function dataHeader(machine, withSetNames) {
   const base = baseHeader(machine);
   if (!withSetNames) return [...base];
@@ -165,11 +161,15 @@ export function parseSetToken(token) {
   return { set: Number(m[1]), side: Number(m[2]), group };
 }
 
+/** set 名として妥当かどうか（空文字は false） */
+export function isValidSetToken(token) {
+  try { parseSetToken(token); return true; } catch { return false; }
+}
+
 /**
  * i7 の set 名から、対になる i5 の set 名を返す。
- * 側(M)を 1 → 2 に入れ替えるだけで、セット番号とグループ番号は保つ。
+ * 側(M)を入れ替えるだけで、セット番号とグループ番号は保つ。
  * 例: "set1-1-1" → "set1-2-1"
- * @returns {string|null} 変換できない場合は null
  */
 export function pairedSetToken(token, targetSide = 2) {
   const t = String(token ?? '').trim();
@@ -177,6 +177,28 @@ export function pairedSetToken(token, targetSide = 2) {
   const m = t.match(SET_RE);
   if (!m) return null;
   return `set${m[1]}-${targetSide}-${Number(m[3])}`;
+}
+
+/**
+ * プルダウン用の set 名一覧を返す。
+ * @param {1|2} side 1=Index1(i7) / 2=Index2(i5)
+ * @returns {{value:string, label:string, set:number, group:number}[]} 48件（4セット × 12グループ）
+ */
+export function setOptions(side) {
+  const out = [];
+  SET_NUMBERS.forEach((set) => {
+    for (let g = 1; g <= GROUP_COUNT; g += 1) {
+      const value = `set${set}-${side}-${g}`;
+      const list = UDI_INDEX[`set${set}-${side}`][String(g)];
+      out.push({
+        value,
+        label: `${value}（${list[0][0]}〜${list[list.length - 1][0]}）`,
+        set,
+        group: g,
+      });
+    }
+  });
+  return out;
 }
 
 /** 指定グループ（8連1本）の index 8 件を返す */
@@ -342,10 +364,7 @@ function checkDuplicatePairs(rows, warnings, k1, k2) {
 
 // ══ サンプル表の組み立て ══
 
-/**
- * MiSeq i100（SampleSheet v2）用の行を構築する。
- * LibraryName は `Sample_ID_Index_Index2` で自動生成する。
- */
+/** MiSeq i100（SampleSheet v2）用の行を構築する */
 export function buildRowsI100(opts) {
   const ids = splitRows(opts.sampleIds).filter((s) => s !== '');
   if (!ids.length) throw new Error('Sample_ID を入力してください。');
@@ -372,7 +391,6 @@ export function buildRowsI100(opts) {
 
 /**
  * NextSeq 用の行を構築する（[Data] 7列）。
- * Sample_ID を空欄にしたテンプレート的な使い方にも対応するため、
  * Sample_ID が未入力でも index の件数だけ行を生成できる（`rowCount` 指定）。
  */
 export function buildRowsNextSeq(opts) {
@@ -593,12 +611,7 @@ export function demoDescriptions(count = 384) {
   return Array.from({ length: count }, (_, i) => `${kinds[Math.floor(i / 96) % kinds.length]} (demo)`);
 }
 
-/**
- * 384サンプルのデモ用サンプルシート CSV を生成する。
- * index は set1-1-1〜set4-1-12（i7 384件）と set1-2-1〜set4-2-12（i5 384件）を使用する。
- * @param {'i100'|'nextseq'|'miseq'} machine
- * @param {boolean} withSetNames set名列を含めるか
- */
+/** 384サンプルのデモ用サンプルシート CSV を生成する */
 export function buildTemplateCsv(machine, withSetNames = false, count = 384) {
   const ids = demoSampleIds(count);
   const descs = demoDescriptions(count);

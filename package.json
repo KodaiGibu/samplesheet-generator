@@ -1,8 +1,8 @@
 {
   "name": "samplesheet-generator-web",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
-  "description": "MiSeq i100 / NextSeq / MiSeq のサンプルシート CSV 作成ツール（UDI index set 指定・384サンプルテンプレート対応）",
+  "description": "MiSeq i100 / NextSeq / MiSeq のサンプルシート CSV 作成ツール（UDI index set 指定・プルダウン選択対応）",
   "type": "module",
   "scripts": {
     "test": "node --test tests/sheet.test.mjs",

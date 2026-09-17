@@ -6,11 +6,14 @@
  *   NextSeq    … 従来形式・7列
  *   MiSeq      … 従来形式・6列
  *   index 一覧 … 収録 index の参照と CSV 出力
+ *
+ * Index の set 指定は「プルダウンで選択」「手動入力」の2モードを切り替えられる。
  */
 import {
   APP_TITLE, DEFAULTS_I100, DEFAULTS_NEXTSEQ, DEFAULTS_MISEQ,
   MACHINES, MACHINE_LABEL, SET_COLUMNS,
-  normalizeDate, expandSetRanges, groupIndexes, splitRows, appendSuffix, pairedSetToken,
+  normalizeDate, expandSetRanges, groupIndexes, splitRows, appendSuffix,
+  pairedSetToken, setOptions, isValidSetToken,
   buildRows, buildCsv, csvFileName, dataHeader, tableHeader,
   buildTemplateCsv, templateFileName, buildIndexListCsv, buildIndexListCsvFor,
 } from './sheet.js';
@@ -19,8 +22,6 @@ const $ = (id) => document.getElementById(id);
 
 /** 機種 → UI の接頭辞 */
 const PREFIX = { i100: 'a', nextseq: 'b', miseq: 'c' };
-/** 接頭辞 → 機種 */
-const MACHINE_OF = { a: 'i100', b: 'nextseq', c: 'miseq' };
 
 /** 接尾辞付与の対象列（機種ごと） */
 const SUFFIX_TARGETS = {
@@ -29,8 +30,13 @@ const SUFFIX_TARGETS = {
   miseq: { ids: 'c-ids', descs: 'c-descs' },
 };
 
+/** プルダウン用の set 一覧（起動時に一度だけ構築） */
+const SET_OPTIONS = { 1: setOptions(1), 2: setOptions(2) };
+
 const app = {
   mode: 'i100',
+  /** 機種ごとの Index 入力方法: 'select' | 'manual' */
+  inputMode: { i100: 'select', nextseq: 'select', miseq: 'select' },
   state: {
     i100: { rows: [], params: null, baseline: {} },
     nextseq: { rows: [], params: null, baseline: {}, namesTouched: false },
@@ -164,14 +170,71 @@ function renderRows(treeId, rows, machine, withSetNames) {
   });
 }
 
-// ══ Index 範囲ブロック ══
+// ══════════ Index 範囲ブロック ══════════
+
+/** 行の入力要素（プルダウン / テキスト）から現在値を読む */
+function readCell(row, which) {
+  const sel = row.querySelector(`.r-${which}-sel`);
+  const txt = row.querySelector(`.r-${which}-txt`);
+  return (txt.classList.contains('hidden') ? sel.value : txt.value) ?? '';
+}
+/** 行の入力要素に値を書く（両方の UI を同期させる） */
+function writeCell(row, which, value, markAuto = false) {
+  const sel = row.querySelector(`.r-${which}-sel`);
+  const txt = row.querySelector(`.r-${which}-txt`);
+  txt.value = value;
+  // プルダウンに該当項目があれば選択、なければ空（手動値）に寄せる
+  sel.value = [...sel.options].some((o) => o.value === value) ? value : '';
+  if (markAuto) { txt.dataset.auto = '1'; sel.dataset.auto = '1'; }
+  else { delete txt.dataset.auto; delete sel.dataset.auto; }
+  row.classList.toggle('auto-filled', markAuto);
+}
+/** 行が自動入力値のままかどうか */
+function isAuto(row, which) {
+  return row.querySelector(`.r-${which}-txt`).dataset.auto === '1';
+}
 
 /** 範囲ブロックの入力値を配列で取得する（例: readRanges('a-i7')） */
 function readRanges(key) {
   return [...$(`${key}-rows`).querySelectorAll('.range-row')].map((row) => ({
-    start: row.querySelector('.r-start').value,
-    end: row.querySelector('.r-end').value,
+    start: readCell(row, 'start'),
+    end: readCell(row, 'end'),
   }));
+}
+
+/** set プルダウンを構築する */
+function buildSetSelect(side, isEnd) {
+  const sel = document.createElement('select');
+  sel.className = isEnd ? 'r-end-sel' : 'r-start-sel';
+  const blank = document.createElement('option');
+  blank.value = '';
+  blank.textContent = isEnd ? '（開始のみ・8 index）' : '（未選択）';
+  sel.appendChild(blank);
+  SET_OPTIONS[side].forEach((o) => {
+    const opt = document.createElement('option');
+    opt.value = o.value;
+    opt.textContent = o.label;
+    sel.appendChild(opt);
+  });
+  return sel;
+}
+
+/** 入力方法（プルダウン / 手動）を行に反映する */
+function applyInputMode(row, mode) {
+  ['start', 'end'].forEach((which) => {
+    const sel = row.querySelector(`.r-${which}-sel`);
+    const txt = row.querySelector(`.r-${which}-txt`);
+    sel.classList.toggle('hidden', mode !== 'select');
+    txt.classList.toggle('hidden', mode === 'select');
+  });
+}
+
+/** 機種の全行に入力方法を反映する */
+function applyInputModeAll(prefix, mode) {
+  ['i7', 'i5'].forEach((side) => {
+    $(`${prefix}-${side}-rows`).querySelectorAll('.range-row')
+      .forEach((row) => applyInputMode(row, mode));
+  });
 }
 
 /** 対応する i5 の行を取得（同じ並び順の n 番目） */
@@ -181,9 +244,7 @@ function i5RowAt(prefix, idx) {
 
 /**
  * Index1 の入力に応じて Index2 を自動入力する。
- * - 「Index2 を自動入力」が ON のときのみ動作
- * - 対応する i5 行が未入力、または直前の自動入力値のままの場合に上書きする
- *   （利用者が手で直した値は保持する）
+ * 未入力または直前の自動入力値のままの場合のみ上書きし、手修正した値は保持する。
  */
 function autoFillIndex2(prefix, rowIdx) {
   if (!$(`${prefix}-autopair`).checked) return;
@@ -191,26 +252,20 @@ function autoFillIndex2(prefix, rowIdx) {
   if (!i7Row) return;
   let i5Row = i5RowAt(prefix, rowIdx);
   if (!i5Row) {
-    // i7 の行数に合わせて i5 の行を増やす
     addRangeRow(`${prefix}-i5`);
     i5Row = i5RowAt(prefix, rowIdx);
     if (!i5Row) return;
   }
-  [['.r-start', 'start'], ['.r-end', 'end']].forEach(([sel]) => {
-    const src = i7Row.querySelector(sel);
-    const dst = i5Row.querySelector(sel);
-    const paired = pairedSetToken(src.value);
-    // 元が空なら対応先も空にする
-    if (src.value.trim() === '') {
-      if (dst.dataset.auto === '1') { dst.value = ''; delete dst.dataset.auto; }
+  ['start', 'end'].forEach((which) => {
+    const src = readCell(i7Row, which).trim();
+    const dst = readCell(i5Row, which).trim();
+    if (src === '') {
+      if (isAuto(i5Row, which)) writeCell(i5Row, which, '');
       return;
     }
+    const paired = pairedSetToken(src);
     if (paired === null) return;
-    // 未入力、または前回の自動入力値のままなら上書きする
-    if (dst.value.trim() === '' || dst.dataset.auto === '1') {
-      dst.value = paired;
-      dst.dataset.auto = '1';
-    }
+    if (dst === '' || isAuto(i5Row, which)) writeCell(i5Row, which, paired, true);
   });
 }
 
@@ -218,36 +273,62 @@ function autoFillIndex2(prefix, rowIdx) {
 function addRangeRow(key, start = '', end = '') {
   const rows = $(`${key}-rows`);
   const prefix = key.slice(0, 1);
+  const machine = MACHINES.find((m) => PREFIX[m] === prefix);
   const isI7 = key.endsWith('i7');
   const side = isI7 ? 1 : 2;
+
   const row = document.createElement('div');
   row.className = 'range-row';
   row.innerHTML = `
     <span class="r-no"></span>
-    <label>開始 set:<input type="text" class="r-start" size="12" placeholder="set1-${side}-1"></label>
-    <label>終了 set:<input type="text" class="r-end" size="12" placeholder="set1-${side}-12"></label>
+    <span class="r-field"><span class="r-cap">開始 set:</span></span>
+    <span class="r-field"><span class="r-cap">終了 set:</span></span>
     <span class="r-info"></span>
     <button type="button" class="mini danger r-del" title="この範囲を削除">×</button>`;
-  row.querySelector('.r-start').value = start;
-  row.querySelector('.r-end').value = end;
-  rows.appendChild(row);
 
-  row.querySelectorAll('input').forEach((inp) => {
-    inp.addEventListener('input', () => {
-      if (isI7) {
-        const idx = [...rows.querySelectorAll('.range-row')].indexOf(row);
-        autoFillIndex2(prefix, idx);
-      } else {
-        // 手動で編集されたら自動入力マークを外す（以後は上書きしない）
-        delete inp.dataset.auto;
-      }
-      refreshCount(prefix);
-    });
+  const fields = row.querySelectorAll('.r-field');
+  [['start', false], ['end', true]].forEach(([which, isEnd], i) => {
+    const sel = buildSetSelect(side, isEnd);
+    const txt = document.createElement('input');
+    txt.type = 'text';
+    txt.className = `r-${which}-txt`;
+    txt.size = 12;
+    txt.placeholder = isEnd ? `set1-${side}-12` : `set1-${side}-1`;
+    fields[i].append(sel, txt);
+  });
+
+  rows.appendChild(row);
+  writeCell(row, 'start', start);
+  writeCell(row, 'end', end);
+  applyInputMode(row, app.inputMode[machine]);
+
+  const onChange = (el) => {
+    // 手で操作されたら自動入力マークを外す
+    delete el.dataset.auto;
+    row.classList.remove('auto-filled');
+    // プルダウンとテキストを同期
+    if (el.classList.contains('r-start-sel')) row.querySelector('.r-start-txt').value = el.value;
+    if (el.classList.contains('r-end-sel')) row.querySelector('.r-end-txt').value = el.value;
+    if (el.classList.contains('r-start-txt')) {
+      const sel = row.querySelector('.r-start-sel');
+      sel.value = [...sel.options].some((o) => o.value === el.value) ? el.value : '';
+    }
+    if (el.classList.contains('r-end-txt')) {
+      const sel = row.querySelector('.r-end-sel');
+      sel.value = [...sel.options].some((o) => o.value === el.value) ? el.value : '';
+    }
+    if (isI7) {
+      const idx = [...rows.querySelectorAll('.range-row')].indexOf(row);
+      autoFillIndex2(prefix, idx);
+    }
+    refreshCount(prefix);
+  };
+  row.querySelectorAll('select, input[type=text]').forEach((el) => {
+    el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => onChange(el));
   });
   row.querySelector('.r-del').addEventListener('click', () => {
     if (rows.querySelectorAll('.range-row').length <= 1) {
-      row.querySelector('.r-start').value = '';
-      row.querySelector('.r-end').value = '';
+      writeCell(row, 'start', ''); writeCell(row, 'end', '');
     } else {
       row.remove();
     }
@@ -264,8 +345,8 @@ function renumberRanges(key) {
   rows.forEach((row, i) => {
     row.querySelector('.r-no').textContent = rows.length > 1 ? `範囲${i + 1}` : '';
     const info = row.querySelector('.r-info');
-    const start = row.querySelector('.r-start').value.trim();
-    const end = row.querySelector('.r-end').value.trim();
+    const start = readCell(row, 'start').trim();
+    const end = readCell(row, 'end').trim();
     if (start === '' && end === '') { info.textContent = ''; info.classList.remove('bad'); return; }
     try {
       info.textContent = `${expandSetRanges([{ start, end }], label).indexes.length} index`;
@@ -411,6 +492,21 @@ function fileKey(machine, params) {
 MACHINES.forEach((machine) => {
   const p = PREFIX[machine];
   const st = app.state[machine];
+
+  // 入力方法の切替（プルダウン / 手動）
+  document.querySelectorAll(`input[name="${p}-mode"]`).forEach((radio) => {
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      app.inputMode[machine] = radio.value;
+      applyInputModeAll(p, radio.value);
+      const manualOnly = readRanges(`${p}-i7`).concat(readRanges(`${p}-i5`))
+        .some((r) => (r.start && !isValidSetToken(r.start)) || (r.end && !isValidSetToken(r.end)
+          && !/^\d{1,2}$/.test(r.end)));
+      setStatus(radio.value === 'select'
+        ? `Index の入力方法: プルダウン選択${manualOnly ? '（プルダウンにない値はテキスト側に保持されています）' : ''}`
+        : 'Index の入力方法: 手動入力（番号だけの省略指定も使えます）');
+    });
+  });
 
   $(`${p}-reset`).addEventListener('click', () => {
     applyDefaults(machine);

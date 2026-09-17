@@ -67,11 +67,17 @@
 
       <fieldset class="lf">
         <legend>Index（set 指定）</legend>
+        <div class="param-grid input-mode-bar">
+          <span class="mode-label">入力方法:</span>
+          <label class="radio"><input type="radio" name="a-mode" value="select" checked> プルダウンで選択</label>
+          <label class="radio"><input type="radio" name="a-mode" value="manual"> 手動入力</label>
+          <span class="vsep"></span>
+          <label class="chk auto-chk"><input type="checkbox" id="a-autopair" checked> Index2 を自動入力</label>
+        </div>
         <div class="range-block">
           <div class="range-head">
             <span class="idx-label">Index1 / i7</span>
             <button type="button" class="mini" data-add-range="a-i7">＋ 範囲を追加</button>
-            <label class="chk auto-chk"><input type="checkbox" id="a-autopair" checked> Index2 を自動入力</label>
           </div>
           <div class="range-rows" id="a-i7-rows"></div>
         </div>
@@ -86,8 +92,10 @@
           <span class="idx-count" id="a-count">—</span>
         </div>
         <p class="hint">1つの set（例 <code>set1-1-3</code>）＝ 8連チューブ1本分の 8 index。
-          <b>Index2 を自動入力</b>が ON のとき、Index1 に <code>set1-1-1</code> と入力すると Index2 に <code>set1-2-1</code> が自動で入ります（入力後の手修正も可能）。<br>
-          セットをまたぐ範囲（<code>set1-1-10</code> 〜 <code>set2-1-3</code>）や、「＋ 範囲を追加」による複数範囲の併記にも対応します。</p>
+          <b>プルダウン</b>では 48 個の set（4セット × 12グループ）から選べます。終了 set に「（開始のみ）」を選ぶと 8 index だけになります。
+          <b>手動入力</b>に切り替えると、<code>12</code> のような番号だけの省略指定も使えます。<br>
+          <b>Index2 を自動入力</b>が ON のとき、Index1 に <code>set1-1-1</code> を選ぶと Index2 に <code>set1-2-1</code> が自動で入ります（入力後の手修正も可能）。
+          セットをまたぐ範囲（<code>set1-1-10</code> 〜 <code>set2-1-3</code>）や複数範囲の併記にも対応します。</p>
       </fieldset>
 
       <fieldset class="lf">
@@ -165,11 +173,17 @@
 
       <fieldset class="lf">
         <legend>Index（set 指定）</legend>
+        <div class="param-grid input-mode-bar">
+          <span class="mode-label">入力方法:</span>
+          <label class="radio"><input type="radio" name="b-mode" value="select" checked> プルダウンで選択</label>
+          <label class="radio"><input type="radio" name="b-mode" value="manual"> 手動入力</label>
+          <span class="vsep"></span>
+          <label class="chk auto-chk"><input type="checkbox" id="b-autopair" checked> Index2 を自動入力</label>
+        </div>
         <div class="range-block">
           <div class="range-head">
             <span class="idx-label">Index1 / i7</span>
             <button type="button" class="mini" data-add-range="b-i7">＋ 範囲を追加</button>
-            <label class="chk auto-chk"><input type="checkbox" id="b-autopair" checked> Index2 を自動入力</label>
           </div>
           <div class="range-rows" id="b-i7-rows"></div>
         </div>
@@ -184,8 +198,10 @@
           <span class="idx-count" id="b-count">—</span>
         </div>
         <p class="hint">1つの set（例 <code>set1-1-3</code>）＝ 8連チューブ1本分の 8 index。
-          <b>Index2 を自動入力</b>が ON のとき、Index1 に <code>set1-1-1</code> と入力すると Index2 に <code>set1-2-1</code> が自動で入ります（入力後の手修正も可能）。<br>
-          セットをまたぐ範囲（<code>set1-1-10</code> 〜 <code>set2-1-3</code>）や、「＋ 範囲を追加」による複数範囲の併記にも対応します。</p>
+          <b>プルダウン</b>では 48 個の set（4セット × 12グループ）から選べます。終了 set に「（開始のみ）」を選ぶと 8 index だけになります。
+          <b>手動入力</b>に切り替えると、<code>12</code> のような番号だけの省略指定も使えます。<br>
+          <b>Index2 を自動入力</b>が ON のとき、Index1 に <code>set1-1-1</code> を選ぶと Index2 に <code>set1-2-1</code> が自動で入ります（入力後の手修正も可能）。
+          セットをまたぐ範囲（<code>set1-1-10</code> 〜 <code>set2-1-3</code>）や複数範囲の併記にも対応します。</p>
       </fieldset>
 
       <fieldset class="lf">
@@ -271,11 +287,17 @@
 
       <fieldset class="lf">
         <legend>Index（set 指定）</legend>
+        <div class="param-grid input-mode-bar">
+          <span class="mode-label">入力方法:</span>
+          <label class="radio"><input type="radio" name="c-mode" value="select" checked> プルダウンで選択</label>
+          <label class="radio"><input type="radio" name="c-mode" value="manual"> 手動入力</label>
+          <span class="vsep"></span>
+          <label class="chk auto-chk"><input type="checkbox" id="c-autopair" checked> Index2 を自動入力</label>
+        </div>
         <div class="range-block">
           <div class="range-head">
             <span class="idx-label">Index1 / i7</span>
             <button type="button" class="mini" data-add-range="c-i7">＋ 範囲を追加</button>
-            <label class="chk auto-chk"><input type="checkbox" id="c-autopair" checked> Index2 を自動入力</label>
           </div>
           <div class="range-rows" id="c-i7-rows"></div>
         </div>
@@ -290,8 +312,10 @@
           <span class="idx-count" id="c-count">—</span>
         </div>
         <p class="hint">1つの set（例 <code>set1-1-3</code>）＝ 8連チューブ1本分の 8 index。
-          <b>Index2 を自動入力</b>が ON のとき、Index1 に <code>set1-1-1</code> と入力すると Index2 に <code>set1-2-1</code> が自動で入ります（入力後の手修正も可能）。<br>
-          セットをまたぐ範囲（<code>set1-1-10</code> 〜 <code>set2-1-3</code>）や、「＋ 範囲を追加」による複数範囲の併記にも対応します。</p>
+          <b>プルダウン</b>では 48 個の set（4セット × 12グループ）から選べます。終了 set に「（開始のみ）」を選ぶと 8 index だけになります。
+          <b>手動入力</b>に切り替えると、<code>12</code> のような番号だけの省略指定も使えます。<br>
+          <b>Index2 を自動入力</b>が ON のとき、Index1 に <code>set1-1-1</code> を選ぶと Index2 に <code>set1-2-1</code> が自動で入ります（入力後の手修正も可能）。
+          セットをまたぐ範囲（<code>set1-1-10</code> 〜 <code>set2-1-3</code>）や複数範囲の併記にも対応します。</p>
       </fieldset>
 
       <fieldset class="lf">
